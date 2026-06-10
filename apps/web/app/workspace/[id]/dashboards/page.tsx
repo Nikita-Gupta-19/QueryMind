@@ -14,7 +14,9 @@ import {
   Sparkles,
   ArrowLeft,
   Settings,
-  UserCheck
+  UserCheck,
+  Menu,
+  X
 } from 'lucide-react';
 import DashboardGrid from '../../../../components/dashboard/DashboardGrid';
 
@@ -51,6 +53,7 @@ export default function WorkspaceDashboardsPage() {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [selectedDashId, setSelectedDashId] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Form states
   const [newDashName, setNewDashName] = useState('');
@@ -226,16 +229,33 @@ export default function WorkspaceDashboardsPage() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-cyan-500/5 blur-[120px] pointer-events-none"></div>
 
       {/* 1. Sidebar */}
-      <aside className="w-80 border-r border-slate-900 bg-slate-950/80 backdrop-blur-xl z-10 flex flex-col">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
+
+      <aside className={`w-80 border-r border-slate-900 bg-slate-950/80 backdrop-blur-xl z-50 flex flex-col fixed md:static top-0 left-0 h-full transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
         {/* Header Branding */}
-        <div className="p-5 border-b border-slate-900 flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-indigo-500 flex items-center justify-center font-bold text-slate-950">
-            QM
+        <div className="p-5 border-b border-slate-900 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-indigo-500 flex items-center justify-center font-bold text-slate-950">
+              QM
+            </div>
+            <div>
+              <h1 className="text-sm font-bold tracking-tight text-white">QueryMind AI</h1>
+              <p className="text-[10px] text-slate-500">Workspace Hub</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-sm font-bold tracking-tight text-white">QueryMind AI</h1>
-            <p className="text-[10px] text-slate-500">Workspace Hub</p>
-          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 md:hidden transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Back navigation */}
@@ -324,6 +344,12 @@ export default function WorkspaceDashboardsPage() {
         {/* Header Top Bar */}
         <header className="px-8 py-4 border-b border-slate-900/60 bg-slate-950/40 backdrop-blur-md flex items-center justify-between">
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 -ml-2 text-slate-400 hover:text-white hover:bg-slate-900 rounded-lg md:hidden mr-2 transition-all"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <Layout className="w-5 h-5 text-indigo-400" />
             <span className="text-sm font-bold text-slate-200">Workspace Dashboard Builder</span>
           </div>
