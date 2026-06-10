@@ -15,6 +15,7 @@ import connectionRouter from './modules/connections/connections.controller';
 import queryRouter from './modules/query/query.controller';
 import glossaryRouter from './modules/glossary/glossary.controller';
 import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
+import { startDetectDriftWorker, scheduleDailyDriftChecks } from './jobs/detect-drift.job';
 
 const app = express();
 const server = http.createServer(app);
@@ -109,6 +110,11 @@ if (process.env.NODE_ENV !== 'test') {
     // Start BullMQ workers
     startEmbedSchemaWorker();
     logger.info('BullMQ embed-schema worker started');
+
+    startDetectDriftWorker();
+    logger.info('BullMQ detect-drift worker started');
+
+    scheduleDailyDriftChecks().catch((err) => logger.error('Failed to schedule daily drift checks:', err));
   });
 }
 

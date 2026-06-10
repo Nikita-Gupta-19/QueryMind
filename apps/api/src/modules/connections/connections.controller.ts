@@ -236,4 +236,35 @@ router.delete(
   }
 );
 
+// 5. Trigger Schema Drift Detection
+router.post(
+  '/:id/connections/:connId/detect-drift',
+  authenticateJWT,
+  requireWorkspaceRole([WorkspaceRole.OWNER, WorkspaceRole.ADMIN]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { id: workspaceId, connId } = req.params;
+
+    try {
+      const conn = await prisma.dbConnection.findFirst({
+        where: { id: connId, workspaceId },
+      });
+
+      if (!conn) {
+        return res.status(404).json({ error: 'Connection not found in this workspace.' });
+      }
+
+      // Enqueue the drift detection job
+      const { enqueueDetectDriftJob } = await import('../../jobs/detect-drift.job');
+      await enqueueDetectDriftJob({ connectionId: connId, workspaceId });
+
+      return res.json({
+        message: 'Schema drift detection job enqueued. Diffs and auto re-embeddings will run shortly.',
+        connectionId: connId,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 export default router;
