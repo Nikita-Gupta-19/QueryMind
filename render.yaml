@@ -4,7 +4,7 @@ services:
     name: querymind-api
     runtime: docker
     dockerContext: apps/api
-    dockerfilePath: Dockerfile
+    dockerfilePath: apps/api/Dockerfile
     plan: free
     envVars:
       - key: PORT
@@ -38,7 +38,7 @@ services:
     name: querymind-web
     runtime: docker
     dockerContext: apps/web
-    dockerfilePath: Dockerfile
+    dockerfilePath: apps/web/Dockerfile
     plan: free
     envVars:
       - key: PORT
