@@ -1,17 +1,15 @@
 import crypto from 'crypto';
 
-// Get key from environment, must be 32 bytes (64 hex characters)
 const getEncryptionKey = (): Buffer => {
-  const keyHex = process.env.ENCRYPTION_KEY;
-  if (!keyHex) {
+  const rawKey = process.env.ENCRYPTION_KEY;
+  if (!rawKey) {
     throw new Error('ENCRYPTION_KEY is not defined in environment variables.');
   }
-  const key = Buffer.from(keyHex, 'hex');
-  if (key.length !== 32) {
-    throw new Error('ENCRYPTION_KEY must be a 32-byte (64 hex character) key.');
-  }
-  return key;
+  // Hash the key using sha256 to ensure we get exactly 32 bytes,
+  // regardless of whether the key is a 64-hex character string or an arbitrary random password.
+  return crypto.createHash('sha256').update(rawKey).digest();
 };
+
 
 /**
  * Encrypts clear text using AES-256-GCM.
