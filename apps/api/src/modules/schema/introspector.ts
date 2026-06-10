@@ -43,14 +43,18 @@ async function introspectPostgres(connectionString: string): Promise<TableSchema
   await client.connect();
 
   try {
-    // Get all user tables (excluding system schemas)
+    // 1. Get the current active schema name dynamically
+    const schemaResult = await client.query<{ current_schema: string }>('SELECT current_schema();');
+    const activeSchema = schemaResult.rows[0]?.current_schema || 'public';
+
+    // 2. Get all user tables in the active schema (excluding system schemas)
     const tablesResult = await client.query<{ table_name: string }>(`
       SELECT table_name
       FROM information_schema.tables
-      WHERE table_schema = 'public'
+      WHERE table_schema = $1
         AND table_type = 'BASE TABLE'
       ORDER BY table_name
-    `);
+    `, [activeSchema]);
 
     const tables: TableSchema[] = [];
 
@@ -66,9 +70,9 @@ async function introspectPostgres(connectionString: string): Promise<TableSchema
       }>(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = $1
+        WHERE table_schema = $1 AND table_name = $2
         ORDER BY ordinal_position
-      `, [tableName]);
+      `, [activeSchema, tableName]);
 
       const columns: ColumnInfo[] = colResult.rows.map((c) => ({
         columnName: c.column_name,
@@ -95,9 +99,9 @@ async function introspectPostgres(connectionString: string): Promise<TableSchema
           ON ccu.constraint_name = tc.constraint_name
           AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'public'
+          AND tc.table_schema = $2
           AND tc.table_name = $1
-      `, [tableName]);
+      `, [tableName, activeSchema]);
 
       const foreignKeys: ForeignKeyInfo[] = fkResult.rows.map((fk) => ({
         columnName: fk.column_name,
@@ -112,8 +116,9 @@ async function introspectPostgres(connectionString: string): Promise<TableSchema
       }>(`
         SELECT indexname, indexdef
         FROM pg_indexes
-        WHERE schemaname = 'public' AND tablename = $1
-      `, [tableName]);
+        WHERE schemaname = $2 AND tablename = $1
+      `, [tableName, activeSchema]);
+
 
       const indexes: IndexInfo[] = idxResult.rows.map((idx) => {
         const isUnique = idx.indexdef.toUpperCase().includes('UNIQUE');
