@@ -6,7 +6,9 @@ services:
     dockerContext: apps/api
     dockerfilePath: apps/api/Dockerfile
     plan: free
+    releaseCommand: npx prisma db push --accept-data-loss
     envVars:
+
       - key: PORT
         value: 4000
       - key: NODE_ENV

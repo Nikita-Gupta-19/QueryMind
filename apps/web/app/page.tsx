@@ -67,10 +67,11 @@ export default function Home() {
         const newWorkspace = await createRes.json();
         router.push(`/workspace/${newWorkspace.id}/query`);
       } else {
-        setAuthError('Could not initialize workspace. Try again.');
+        const errData = await createRes.json().catch(() => ({}));
+        setAuthError(`Could not initialize workspace. (API URL: ${API_URL}). error: ${errData.error || 'Unknown Error'}`);
       }
     } catch (err) {
-      setAuthError('Failed to establish workspace connection.');
+      setAuthError(`Failed to establish workspace connection. (API URL: ${API_URL})`);
     }
   };
 
@@ -100,7 +101,7 @@ export default function Home() {
         setLoading(false);
       }
     } catch (err) {
-      setAuthError('API Server is starting up. Please try again in a few seconds.');
+      setAuthError(`API Server at ${API_URL} is starting up or unreachable. Please try again in a few seconds.`);
       setLoading(false);
     }
   };
@@ -127,11 +128,11 @@ export default function Home() {
         localStorage.setItem('token', data.accessToken);
         await navigateToWorkspace(data.accessToken);
       } else {
-        setAuthError('Failed to initialize demo workspace.');
+        setAuthError(`Failed to initialize demo workspace. (API URL: ${API_URL}). error: ${data.error || 'Unknown Error'}`);
         setLoading(false);
       }
     } catch (err) {
-      setAuthError('API Server is starting up. Please try again in a few seconds.');
+      setAuthError(`API Server at ${API_URL} is starting up or unreachable. Please try again in a few seconds.`);
       setLoading(false);
     }
   };
