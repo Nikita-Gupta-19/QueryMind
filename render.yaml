@@ -16,8 +16,10 @@ services:
           name: querymind-db
           property: connectionString
       - key: REDIS_URL
-        fromConnectionString:
+        fromService:
+          type: keyvalue
           name: querymind-redis
+          property: connectionString
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: JWT_SECRET
@@ -46,11 +48,13 @@ services:
           name: querymind-api
           property: host
 
+  # 3. Redis Service (KeyValue store)
+  - type: keyvalue
+    name: querymind-redis
+    plan: starter
+    ipAllowList: []
+
 databases:
   - name: querymind-db
     plan: starter
     postgresMajorVersion: 16
-
-redis:
-  - name: querymind-redis
-    plan: starter
