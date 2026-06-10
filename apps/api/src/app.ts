@@ -121,6 +121,71 @@ app.get('/api/diagnostics/db-sync', async (_req: Request, res: Response) => {
   }
 });
 
+// Diagnostics Embed Schema Route
+import { introspectDatabase } from './modules/schema/introspector';
+import { generateEmbeddingsBatch } from './lib/embeddings';
+import { decrypt } from './modules/connections/crypto.utils';
+import { DbType } from '@prisma/client';
+
+app.get('/api/diagnostics/embed-schema/:connId', async (req: Request, res: Response) => {
+  const { connId } = req.params;
+  const logs: string[] = [];
+  try {
+    const prisma = (await import('./config/db')).default;
+    logs.push(`Fetching connection: ${connId}`);
+    const conn = await prisma.dbConnection.findUnique({ where: { id: connId } });
+    if (!conn) throw new Error(`Connection ${connId} not found`);
+
+    logs.push(`Decrypting connection string...`);
+    const connectionString = decrypt(conn.encryptedConnString);
+
+    logs.push(`Introspecting database...`);
+    const tables = await introspectDatabase(connectionString, conn.dbType as DbType);
+    logs.push(`Found ${tables.length} tables`);
+
+    if (tables.length > 0) {
+      logs.push(`Generating embeddings for ${tables.length} tables...`);
+      const descriptions = tables.map((t) => t.description || '');
+      const embeddings = await generateEmbeddingsBatch(descriptions);
+      logs.push(`Generated ${embeddings.length} embeddings`);
+
+      logs.push(`Deleting stale embeddings...`);
+      await prisma.schemaEmbedding.deleteMany({ where: { connectionId: connId } });
+
+      logs.push(`Inserting new embeddings...`);
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i];
+        const embedding = embeddings[i];
+        const embeddingStr = `[${embedding.join(',')}]`;
+
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "schema_embeddings" 
+             (id, "connectionId", "tableName", "columnNames", description, embedding, "updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::vector, NOW())`,
+          connId,
+          table.tableName,
+          table.columns.map((c) => c.columnName),
+          table.description || '',
+          embeddingStr
+        );
+      }
+      logs.push(`Embeddings inserted successfully`);
+    }
+
+    return res.json({
+      success: true,
+      logs
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      logs,
+      error: err.message,
+      stack: err.stack
+    });
+  }
+});
+
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
   return res.json({ status: 'healthy', timestamp: new Date() });
