@@ -1,5 +1,5 @@
 services:
-  # 1. API Backend Service (Kept on Docker since it uses runtime vars successfully)
+  # 1. API Backend Service
   - type: web
     name: querymind-api
     runtime: docker
@@ -33,12 +33,12 @@ services:
       - key: DEV_AUTH_BYPASS
         value: "false"
 
-  # 2. Next.js Web Frontend Service (Uses native Node to inject NEXT_PUBLIC_API_URL at build-time)
+  # 2. Next.js Web Frontend Service
   - type: web
     name: querymind-web
     runtime: node
     rootDir: apps/web
-    buildCommand: npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm run start
     plan: free
     envVars:
