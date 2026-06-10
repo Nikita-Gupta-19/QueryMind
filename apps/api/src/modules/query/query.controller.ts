@@ -10,6 +10,7 @@ import { generateSQL, generateQueryPlan } from './generator';
 import { validateSQL } from './validator';
 import { executeQuery } from './executor';
 import { cacheGet, cacheSet } from '../../lib/redis';
+import { resolveGlossaryTerms, buildGlossaryContext } from './glossary-resolver';
 
 const router = Router({ mergeParams: true });
 
@@ -141,6 +142,10 @@ router.post(
 
       const schemaContext = buildSchemaContext(relevantTables);
 
+      // ── Step 2.5: Resolve business glossary terms ──────────────────────────
+      const glossaryTerms = await resolveGlossaryTerms(trimmedQuestion, workspaceId);
+      const glossaryContext = buildGlossaryContext(glossaryTerms);
+
       // ── Step 3: Generate query plan (streamed via Socket.IO) ───────────────
       if (io) {
         io.to(`workspace:${workspaceId}`).emit('query:progress', {
@@ -171,7 +176,8 @@ router.post(
       const { sql: rawSQL, explanation, confidence } = await generateSQL(
         trimmedQuestion,
         schemaContext,
-        connection.dbType as 'POSTGRES' | 'MYSQL'
+        connection.dbType as 'POSTGRES' | 'MYSQL',
+        glossaryContext
       );
 
       // ── Step 5: 4-layer SQL safety validation ──────────────────────────────
@@ -318,6 +324,11 @@ router.post(
         relevantTables: relevantTables.map((t) => ({
           tableName: t.tableName,
           similarity: Math.round(t.similarity * 100) / 100,
+        })),
+        resolvedGlossary: glossaryTerms.map((g) => ({
+          businessTerm: g.businessTerm,
+          schemaTerm: g.schemaTerm,
+          similarity: Math.round(g.similarity * 100) / 100,
         })),
       });
     } catch (err: any) {

@@ -13,6 +13,7 @@ import authRouter from './modules/auth/auth.controller';
 import workspaceRouter from './modules/workspace/workspace.controller';
 import connectionRouter from './modules/connections/connections.controller';
 import queryRouter from './modules/query/query.controller';
+import glossaryRouter from './modules/glossary/glossary.controller';
 import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
 
 const app = express();
@@ -78,6 +79,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/workspaces', workspaceRouter);
 app.use('/api/workspaces', connectionRouter); // e.g. /api/workspaces/:id/connections
 app.use('/api/workspaces', queryRouter);      // e.g. /api/workspaces/:id/query
+app.use('/api/workspaces', glossaryRouter);   // e.g. /api/workspaces/:id/glossary
 
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
