@@ -14,6 +14,7 @@ import workspaceRouter from './modules/workspace/workspace.controller';
 import connectionRouter from './modules/connections/connections.controller';
 import queryRouter from './modules/query/query.controller';
 import glossaryRouter from './modules/glossary/glossary.controller';
+import dashboardRouter from './modules/dashboard/dashboard.controller';
 import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
 import { startDetectDriftWorker, scheduleDailyDriftChecks } from './jobs/detect-drift.job';
 
@@ -81,6 +82,8 @@ app.use('/api/workspaces', workspaceRouter);
 app.use('/api/workspaces', connectionRouter); // e.g. /api/workspaces/:id/connections
 app.use('/api/workspaces', queryRouter);      // e.g. /api/workspaces/:id/query
 app.use('/api/workspaces', glossaryRouter);   // e.g. /api/workspaces/:id/glossary
+app.use('/api/workspaces', dashboardRouter);  // e.g. /api/workspaces/:id/dashboards
+app.use('/api/dashboards', dashboardRouter);  // e.g. /api/dashboards/share/:token
 
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
