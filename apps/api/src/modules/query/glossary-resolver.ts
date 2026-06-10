@@ -51,7 +51,8 @@ export async function resolveGlossaryTerms(
          description,
          1 - (embedding <=> $1::vector) AS similarity
        FROM "GlossaryTerm"
-       WHERE "workspaceId" = $2
+       WHERE "workspaceId" = $2::uuid
+
          AND embedding IS NOT NULL
        ORDER BY embedding <=> $1::vector
        LIMIT $3`,
