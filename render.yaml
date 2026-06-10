@@ -1,5 +1,5 @@
 services:
-  # 1. API Backend Service
+  # 1. API Backend Service (Kept on Docker since it uses runtime vars successfully)
   - type: web
     name: querymind-api
     runtime: docker
@@ -33,19 +33,20 @@ services:
       - key: DEV_AUTH_BYPASS
         value: "false"
 
-  # 2. Next.js Web Frontend Service
+  # 2. Next.js Web Frontend Service (Uses native Node to inject NEXT_PUBLIC_API_URL at build-time)
   - type: web
     name: querymind-web
-    runtime: docker
-    dockerContext: apps/web
-    dockerfilePath: apps/web/Dockerfile
+    runtime: node
+    rootDir: apps/web
+    buildCommand: npm run build
+    startCommand: npm run start
     plan: free
     envVars:
       - key: PORT
         value: 3000
       - key: NEXT_PUBLIC_API_URL
         sync: false
-        placeholder: "Enter public API URL (e.g. https://querymind-api.onrender.com) after creation"
+        placeholder: "Enter public API URL (e.g. https://querymind-api-uz5w.onrender.com) after creation"
 
   # 3. Redis Service (KeyValue store)
   - type: keyvalue
