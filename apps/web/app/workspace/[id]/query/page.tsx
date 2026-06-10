@@ -15,6 +15,7 @@ import {
   UserCheck,
   Menu,
   X,
+  Plus,
 } from 'lucide-react';
 
 import QueryPlanSteps from '../../../../components/query/QueryPlanSteps';
@@ -78,6 +79,84 @@ export default function WorkspaceQueryPage() {
 
   const socketRef = useRef<Socket | null>(null);
 
+  // Connect Database Modal States
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [newConnName, setNewConnName] = useState('');
+  const [newConnType, setNewConnType] = useState('POSTGRES');
+  const [newConnString, setNewConnString] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [savingConnection, setSavingConnection] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setModalError(null);
+    setModalSuccess(null);
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`
+      };
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/connections/test-raw`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ dbType: newConnType, connectionString: newConnString })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setModalSuccess(data.message || 'Connection test succeeded!');
+      } else {
+        setModalError(data.error || data.details || 'Connection test failed.');
+      }
+    } catch (err) {
+      setModalError('Failed to contact API server for testing.');
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleSaveConnection = async () => {
+    setSavingConnection(true);
+    setModalError(null);
+    setModalSuccess(null);
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`
+      };
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/connections`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: newConnName, dbType: newConnType, connectionString: newConnString })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setModalSuccess('Connection saved successfully!');
+        const updatedConnections = [...connections, data];
+        setConnections(updatedConnections);
+        setSelectedConnectionId(data.id);
+        
+        setTimeout(() => {
+          setShowConnectModal(false);
+          setNewConnName('');
+          setNewConnString('');
+          setModalSuccess(null);
+        }, 1000);
+      } else {
+        setModalError(data.error || 'Failed to save connection.');
+      }
+    } catch (err) {
+      setModalError('Failed to contact API server for saving.');
+    } finally {
+      setSavingConnection(false);
+    }
+  };
+
   // Auto-authenticate via Dev Bypass if no token is found in development
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -117,9 +196,9 @@ export default function WorkspaceQueryPage() {
         const connRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/connections`, { headers });
         if (connRes.ok) {
           const connData = await connRes.json();
-          setConnections(connData.connections || []);
-          if (connData.connections && connData.connections.length > 0) {
-            setSelectedConnectionId(connData.connections[0].id);
+          setConnections(connData || []);
+          if (connData && connData.length > 0) {
+            setSelectedConnectionId(connData[0].id);
           }
         }
 
@@ -359,6 +438,17 @@ export default function WorkspaceQueryPage() {
                 ))}
               </select>
             )}
+            <button
+              onClick={() => {
+                setShowConnectModal(true);
+                setModalError(null);
+                setModalSuccess(null);
+              }}
+              className="mt-2.5 w-full flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-900/80 hover:border-slate-700/50 text-cyan-400 text-xs font-bold transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Connect Database</span>
+            </button>
           </div>
         </div>
 
@@ -543,6 +633,131 @@ export default function WorkspaceQueryPage() {
           )}
         </div>
       </main>
+
+      {/* 4. Connect Database Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-md p-6 rounded-3xl glow-indigo border-slate-800 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Database className="w-4 h-4 text-cyan-400 mr-2" />
+                Connect Relational Database
+              </h3>
+              <button
+                onClick={() => setShowConnectModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Connection Display Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Production Analytics DB"
+                  value={newConnName}
+                  onChange={(e) => setNewConnName(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Database Engine
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewConnType('POSTGRES')}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                      newConnType === 'POSTGRES'
+                        ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
+                        : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    PostgreSQL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewConnType('MYSQL')}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                      newConnType === 'MYSQL'
+                        ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
+                        : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    MySQL
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  URI Connection String
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder={
+                    newConnType === 'POSTGRES'
+                      ? 'postgresql://user:password@host:port/dbname?sslmode=require'
+                      : 'mysql://user:password@host:port/dbname'
+                  }
+                  value={newConnString}
+                  onChange={(e) => setNewConnString(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none font-mono"
+                />
+                <p className="text-[9px] text-slate-500 mt-1">
+                  Credentials are encrypted at rest using AES-256-GCM.
+                </p>
+              </div>
+
+              {modalError && (
+                <div className="p-3 text-[10px] rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 leading-relaxed max-h-24 overflow-y-auto font-mono">
+                  {modalError}
+                </div>
+              )}
+
+              {modalSuccess && (
+                <div className="p-3 text-[10px] rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 leading-relaxed">
+                  {modalSuccess}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={testingConnection || savingConnection || !newConnName || !newConnString}
+                  onClick={handleTestConnection}
+                  className="w-full flex items-center justify-center space-x-1.5 py-3 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900/80 text-slate-300 text-xs font-bold transition-all disabled:opacity-40"
+                >
+                  {testingConnection ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>Test Connection</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={testingConnection || savingConnection || !newConnName || !newConnString}
+                  onClick={handleSaveConnection}
+                  className="w-full flex items-center justify-center space-x-1.5 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 hover:from-cyan-300 hover:to-indigo-400 text-slate-950 text-xs font-bold transition-all disabled:opacity-40"
+                >
+                  {savingConnection ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                  ) : (
+                    <span>Save Connection</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
