@@ -133,21 +133,5 @@ npx tsx src/test-setup.ts
 
 ---
 
-## 🎓 Interview Q&A (Resume Defensibility)
-
-**Q: Why choose pgvector over Pinecone or Milvus?**
-> A: pgvector keeps all transaction data and vector embeddings in one PostgreSQL instance. This eliminates infrastructure costs, maintains transaction boundaries (ACID), prevents data egress issues, and simplifies deployments. For under 50,000 schemas, a pgvector table configured with an HNSW index performs matching in under 5ms.
-
-**Q: How do you prevent LLMs from inventing database columns?**
-> A: hallucination is prevented using Schema-Aware RAG. We embed target database schemas and query the top-K relevant tables using cosine similarity. Only columns/tables returned by pgvector are fed to the Gemini context. The LLM never sees non-existent column fields.
-
-**Q: How does the business glossary resolver work?**
-> A: Real schemas use abbreviations like `gmv`, while business users query for "revenue". When a query is initiated, QueryMind searches glossary vector terms, resolves them (e.g. `revenue` -> `gmv`), and passes this explicit instruction to the SQL generator alongside RAG tables.
-
-**Q: Why a custom agent loop instead of LangChain or CrewAI?**
-> A: LangChain abstracts basic mechanics like tool-calling, prompt structure, and loops. Interviewers prefer candidates who can write a custom agent loop: a simple `while` loop that takes instructions, triggers tools (crawlers, validators, executors), parses observations, terminates on target resolution, and runs with a hard max-iterations guard (5 loops) to prevent run-away api costs.
-
----
-
 ## 📄 License
 This project is licensed under the MIT License.
