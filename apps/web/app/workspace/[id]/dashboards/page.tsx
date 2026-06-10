@@ -18,6 +18,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
+import { API_URL } from '../../../config';
 import DashboardGrid from '../../../../components/dashboard/DashboardGrid';
 
 interface QueryHistory {
@@ -73,7 +74,7 @@ export default function WorkspaceDashboardsPage() {
 
   const handleDevBypassLogin = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/auth/dev-login', {
+      const res = await fetch(`${API_URL}/api/auth/dev-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'nikita@querymind.ai' }),
@@ -92,7 +93,7 @@ export default function WorkspaceDashboardsPage() {
   const fetchDashboards = async (token: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/dashboards`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -124,7 +125,7 @@ export default function WorkspaceDashboardsPage() {
 
     setCreating(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/dashboards`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -151,7 +152,7 @@ export default function WorkspaceDashboardsPage() {
     if (!currentDashboard || !confirm(`Delete dashboard "${currentDashboard.name}"?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/dashboards/${selectedDashId}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards/${selectedDashId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${authToken || localStorage.getItem('token')}`,
@@ -174,7 +175,7 @@ export default function WorkspaceDashboardsPage() {
 
     setUpdating(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/dashboards/${selectedDashId}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards/${selectedDashId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -198,7 +199,7 @@ export default function WorkspaceDashboardsPage() {
     if (!confirm('Remove this widget from the dashboard?')) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/dashboards/${selectedDashId}/items/${itemId}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards/${selectedDashId}/items/${itemId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${authToken || localStorage.getItem('token')}`,

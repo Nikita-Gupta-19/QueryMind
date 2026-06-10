@@ -33,6 +33,45 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: querymind-api
+    restart: always
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://querymind:querymind_password@db:5432/querymind_db?schema=public
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: "637573746f6d65727365676d656e74656e6372797074696f6e6b6579666f7261"
+      JWT_SECRET: "querymind_production_secret_key_change_me_in_real_prod"
+      JWT_REFRESH_SECRET: "querymind_production_refresh_secret_key_change_me_in_real_prod"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEV_AUTH_BYPASS: "true"
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: querymind-web
+    restart: always
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
   redis_data:

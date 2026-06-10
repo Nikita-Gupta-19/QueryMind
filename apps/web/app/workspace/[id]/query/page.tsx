@@ -24,6 +24,7 @@ import ResultTable from '../../../../components/query/ResultTable';
 import FeedbackCard from '../../../../components/query/FeedbackCard';
 import AgentSteps, { AgentStepTrace } from '../../../../components/query/AgentSteps';
 import { HistorySkeleton } from '../../../../components/query/Skeletons';
+import { API_URL } from '../../../config';
 
 interface Connection {
   id: string;
@@ -89,7 +90,7 @@ export default function WorkspaceQueryPage() {
 
   const handleDevBypassLogin = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/auth/dev-login', {
+      const res = await fetch(`${API_URL}/api/auth/dev-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'nikita@querymind.ai' }),
@@ -113,7 +114,7 @@ export default function WorkspaceQueryPage() {
         const headers = { Authorization: `Bearer ${authToken}` };
         
         // 1. Fetch DB connections in this workspace
-        const connRes = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/connections`, { headers });
+        const connRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/connections`, { headers });
         if (connRes.ok) {
           const connData = await connRes.json();
           setConnections(connData.connections || []);
@@ -124,7 +125,7 @@ export default function WorkspaceQueryPage() {
 
         // 2. Fetch Query History
         setLoadingHistory(true);
-        const histRes = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/query/history?limit=10`, { headers });
+        const histRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/query/history?limit=10`, { headers });
         if (histRes.ok) {
           const histData = await histRes.json();
           setHistory(histData.history || []);
@@ -143,7 +144,7 @@ export default function WorkspaceQueryPage() {
   useEffect(() => {
     if (!workspaceId) return;
 
-    const socketUrl = 'http://localhost:4000';
+    const socketUrl = API_URL;
     const socket = io(socketUrl);
     socketRef.current = socket;
 
@@ -187,7 +188,7 @@ export default function WorkspaceQueryPage() {
       setChartType(data.chartType);
       
       // Refresh History List
-      fetch(`http://localhost:4000/api/workspaces/${workspaceId}/query/history?limit=10`, {
+      fetch(`${API_URL}/api/workspaces/${workspaceId}/query/history?limit=10`, {
         headers: { Authorization: `Bearer ${authToken || localStorage.getItem('token')}` },
       })
         .then((res) => res.json())
@@ -262,7 +263,7 @@ export default function WorkspaceQueryPage() {
     const endpoint = agentMode ? 'agent' : 'query';
 
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/${endpoint}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

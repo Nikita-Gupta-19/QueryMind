@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { TableSkeleton } from '../../../../components/query/Skeletons';
+import { API_URL } from '../../../config';
 
 interface GlossaryTerm {
   id: string;
@@ -56,7 +57,7 @@ export default function WorkspaceGlossaryPage() {
 
   const handleDevBypassLogin = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/auth/dev-login', {
+      const res = await fetch(`${API_URL}/api/auth/dev-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'nikita@querymind.ai' }),
@@ -75,7 +76,7 @@ export default function WorkspaceGlossaryPage() {
   const fetchGlossaryTerms = async (token: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/glossary`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/glossary`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -104,7 +105,7 @@ export default function WorkspaceGlossaryPage() {
     setFormError(null);
 
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/glossary`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/glossary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +141,7 @@ export default function WorkspaceGlossaryPage() {
     if (!confirm('Are you sure you want to delete this mapping?')) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/glossary/${termId}`, {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/glossary/${termId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${authToken || localStorage.getItem('token')}`,

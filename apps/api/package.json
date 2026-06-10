@@ -9,7 +9,8 @@
     "start": "node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test": "tsx src/test-setup.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

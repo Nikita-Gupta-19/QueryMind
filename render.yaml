@@ -1,0 +1,56 @@
+services:
+  # 1. API Backend Service
+  - type: web
+    name: querymind-api
+    runtime: docker
+    dockerContext: apps/api
+    dockerfilePath: Dockerfile
+    plan: starter
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: querymind-db
+          property: connectionString
+      - key: REDIS_URL
+        fromConnectionString:
+          name: querymind-redis
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEV_AUTH_BYPASS
+        value: "false"
+
+  # 2. Next.js Web Frontend Service
+  - type: web
+    name: querymind-web
+    runtime: docker
+    dockerContext: apps/web
+    dockerfilePath: Dockerfile
+    plan: starter
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: querymind-api
+          property: host
+
+databases:
+  - name: querymind-db
+    plan: starter
+    postgresMajorVersion: 16
+
+redis:
+  - name: querymind-redis
+    plan: starter

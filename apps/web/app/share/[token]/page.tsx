@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Layout, Globe, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
+import { API_URL } from '../../config';
 import DashboardGrid from '../../../components/dashboard/DashboardGrid';
 
 interface QueryHistory {
@@ -44,7 +45,7 @@ export default function PublicShareDashboardPage() {
       setError(null);
 
       try {
-        const res = await fetch(`http://localhost:4000/api/dashboards/share/${token}`);
+        const res = await fetch(`${API_URL}/api/dashboards/share/${token}`);
         const data = await res.json();
 
         if (res.ok) {
