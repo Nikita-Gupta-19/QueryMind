@@ -1,0 +1,183 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "pgvector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEW
+}
+
+enum DbType {
+  POSTGRES
+  MYSQL
+}
+
+enum QueryStatus {
+  SUCCESS
+  FAILED
+  RUNNING
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String?
+  name         String?
+  avatarUrl    String?
+  googleId     String?  @unique
+  createdAt    DateTime @default(now())
+
+  ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  sessions           Session[]
+  queryHistories     QueryHistory[]
+  queryCorrections   QueryCorrection[]
+  auditLogs          AuditLog[]
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model Workspace {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  ownerId   String   @db.Uuid
+  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  members        WorkspaceMember[]
+  dbConnections  DbConnection[]
+  glossaryTerms  GlossaryTerm[]
+  queryHistories QueryHistory[]
+  dashboards     Dashboard[]
+  auditLogs      AuditLog[]
+}
+
+model WorkspaceMember {
+  workspaceId String        @db.Uuid
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String        @db.Uuid
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(VIEW)
+
+  @@id([workspaceId, userId])
+}
+
+model DbConnection {
+  id                   String             @id @default(uuid()) @db.Uuid
+  workspaceId          String             @db.Uuid
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                 String
+  dbType               DbType
+  encryptedConnString  String
+  lastSyncedAt         DateTime?
+  createdAt            DateTime           @default(now())
+
+  schemaEmbeddings     SchemaEmbedding[]
+  queryHistories       QueryHistory[]
+}
+
+model SchemaEmbedding {
+  id           String                  @id @default(uuid()) @db.Uuid
+  connectionId String                  @db.Uuid
+  connection   DbConnection            @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  tableName    String
+  columnNames  String[]
+  description  String?
+  embedding    Unsupported("vector(1536)")?
+  updatedAt    DateTime                @updatedAt
+}
+
+model GlossaryTerm {
+  id           String                  @id @default(uuid()) @db.Uuid
+  workspaceId  String                  @db.Uuid
+  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  businessTerm String
+  schemaTerm   String
+  description  String?
+  embedding    Unsupported("vector(1536)")?
+  createdAt    DateTime                @default(now())
+}
+
+model QueryCorrection {
+  id                String                      @id @default(uuid()) @db.Uuid
+  queryHistoryId    String                      @db.Uuid
+  queryHistory      QueryHistory                @relation(fields: [queryHistoryId], references: [id], onDelete: Cascade)
+  questionEmbedding Unsupported("vector(1536)")?
+  correctedSql      String
+  schemaFingerprint String
+  submittedBy       String                      @db.Uuid
+  submittedByUser   User                        @relation(fields: [submittedBy], references: [id], onDelete: Cascade)
+  createdAt         DateTime                    @default(now())
+}
+
+model QueryHistory {
+  id             String            @id @default(uuid()) @db.Uuid
+  workspaceId    String            @db.Uuid
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String            @db.Uuid
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectionId   String            @db.Uuid
+  connection     DbConnection      @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  question       String
+  generatedSql   String?
+  resultPreview  Json?
+  chartType      String?
+  executionMs    Int?
+  status         QueryStatus       @default(RUNNING)
+  createdAt      DateTime          @default(now())
+
+  corrections    QueryCorrection[]
+  dashboardItems DashboardItem[]
+}
+
+model Dashboard {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @db.Uuid
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  isPublic    Boolean         @default(false)
+  publicToken String?         @unique
+  createdAt   DateTime        @default(now())
+
+  items       DashboardItem[]
+}
+
+model DashboardItem {
+  id                  String       @id @default(uuid()) @db.Uuid
+  dashboardId         String       @db.Uuid
+  dashboard           Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  queryHistoryId      String       @db.Uuid
+  queryHistory        QueryHistory @relation(fields: [queryHistoryId], references: [id], onDelete: Cascade)
+  chartType           String?
+  gridPosition        Json?
+  refreshIntervalMins Int?
+}
+
+model AuditLog {
+  id           String     @id @default(uuid()) @db.Uuid
+  workspaceId  String?    @db.Uuid
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  userId       String?    @db.Uuid
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+}
