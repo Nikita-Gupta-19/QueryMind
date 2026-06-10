@@ -94,6 +94,33 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 
+
+// Diagnostics DB Sync Route
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+
+app.get('/api/diagnostics/db-sync', async (_req: Request, res: Response) => {
+  try {
+    const { stdout, stderr } = await execAsync('npx prisma db push --accept-data-loss', {
+      env: { ...process.env }
+    });
+    return res.json({
+      success: true,
+      stdout,
+      stderr
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+      stdout: err.stdout,
+      stderr: err.stderr,
+      stack: err.stack
+    });
+  }
+});
+
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
   return res.json({ status: 'healthy', timestamp: new Date() });
