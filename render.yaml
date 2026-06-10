@@ -5,7 +5,7 @@ services:
     runtime: docker
     dockerContext: apps/api
     dockerfilePath: Dockerfile
-    plan: starter
+    plan: free
     envVars:
       - key: PORT
         value: 4000
@@ -39,22 +39,21 @@ services:
     runtime: docker
     dockerContext: apps/web
     dockerfilePath: Dockerfile
-    plan: starter
+    plan: free
     envVars:
       - key: PORT
         value: 3000
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          name: querymind-api
-          property: host
+        sync: false
+        placeholder: "Enter public API URL (e.g. https://querymind-api.onrender.com) after creation"
 
   # 3. Redis Service (KeyValue store)
   - type: keyvalue
     name: querymind-redis
-    plan: starter
+    plan: free
     ipAllowList: []
 
 databases:
   - name: querymind-db
-    plan: starter
+    plan: free
     postgresMajorVersion: 16
