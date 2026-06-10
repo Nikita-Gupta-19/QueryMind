@@ -100,7 +100,7 @@ export function startEmbedSchemaWorker(): Worker {
         await prisma.$executeRawUnsafe(
           `INSERT INTO "schema_embeddings" 
              (id, "connectionId", "tableName", "columnNames", description, embedding, "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::vector, NOW())`,
+           VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, $5::vector, NOW())`,
           connectionId,
           table.tableName,
           table.columns.map((c) => c.columnName),
