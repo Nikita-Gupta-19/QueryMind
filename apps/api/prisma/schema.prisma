@@ -102,7 +102,10 @@ model SchemaEmbedding {
   description  String?
   embedding    Unsupported("vector(1536)")?
   updatedAt    DateTime                @updatedAt
+
+  @@map("schema_embeddings")
 }
+
 
 model GlossaryTerm {
   id           String                  @id @default(uuid()) @db.Uuid
