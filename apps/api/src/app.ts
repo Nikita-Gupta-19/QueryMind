@@ -15,8 +15,10 @@ import connectionRouter from './modules/connections/connections.controller';
 import queryRouter from './modules/query/query.controller';
 import glossaryRouter from './modules/glossary/glossary.controller';
 import dashboardRouter from './modules/dashboard/dashboard.controller';
+import agentRouter from './modules/agent/agent.controller';
 import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
 import { startDetectDriftWorker, scheduleDailyDriftChecks } from './jobs/detect-drift.job';
+import { prometheusRegistry } from './lib/metrics';
 
 const app = express();
 const server = http.createServer(app);
@@ -83,11 +85,18 @@ app.use('/api/workspaces', connectionRouter); // e.g. /api/workspaces/:id/connec
 app.use('/api/workspaces', queryRouter);      // e.g. /api/workspaces/:id/query
 app.use('/api/workspaces', glossaryRouter);   // e.g. /api/workspaces/:id/glossary
 app.use('/api/workspaces', dashboardRouter);  // e.g. /api/workspaces/:id/dashboards
+app.use('/api/workspaces', agentRouter);      // e.g. /api/workspaces/:id/agent
 app.use('/api/dashboards', dashboardRouter);  // e.g. /api/dashboards/share/:token
 
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
   return res.json({ status: 'healthy', timestamp: new Date() });
+});
+
+// Prometheus Metrics Route
+app.get('/metrics', async (_req: Request, res: Response) => {
+  res.set('Content-Type', prometheusRegistry.contentType);
+  return res.end(await prometheusRegistry.metrics());
 });
 
 // Global Error Handler Middleware

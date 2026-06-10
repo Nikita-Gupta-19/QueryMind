@@ -20,6 +20,7 @@ import SQLViewer from '../../../../components/query/SQLViewer';
 import ChartRenderer from '../../../../components/query/ChartRenderer';
 import ResultTable from '../../../../components/query/ResultTable';
 import FeedbackCard from '../../../../components/query/FeedbackCard';
+import AgentSteps, { AgentStepTrace } from '../../../../components/query/AgentSteps';
 
 interface Connection {
   id: string;
@@ -52,6 +53,11 @@ export default function WorkspaceQueryPage() {
   const [executing, setExecuting] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryId, setQueryId] = useState<string | null>(null);
+
+  // Agent Mode States
+  const [agentMode, setAgentMode] = useState(false);
+  const [agentSteps, setAgentSteps] = useState<AgentStepTrace[]>([]);
+  const [agentAnswer, setAgentAnswer] = useState<string | null>(null);
   
   // Pipeline Socket Streams
   const [activeStage, setActiveStage] = useState<string>('');
@@ -190,6 +196,41 @@ export default function WorkspaceQueryPage() {
       setStageMessage(`Execution failed: ${data.error}`);
     });
 
+    // Agent Loop Listeners
+    socket.on('agent:started', (data: { question: string }) => {
+      setAgentSteps([]);
+      setAgentAnswer(null);
+      setQueryId(null);
+      setActiveStage('agent_analysis');
+      setStageMessage('Agent loop started...');
+      setQueryPlan('');
+      setGeneratedSql('');
+      setExplanation('');
+      setFields([]);
+      setRows([]);
+      setChartType('');
+    });
+
+    socket.on('agent:step', (data: { step: { thought: string; action: string; params: any } }) => {
+      setAgentSteps((prev) => [...prev, { type: 'step', ...data.step }]);
+      setStageMessage(data.step.thought);
+    });
+
+    socket.on('agent:result', (data: { result: { action: string; output: any } }) => {
+      setAgentSteps((prev) => [...prev, { type: 'result', ...data.result }]);
+    });
+
+    socket.on('agent:completed', (data: { answer: string }) => {
+      setAgentAnswer(data.answer);
+      setActiveStage('completed');
+      setStageMessage('Agent completed analysis.');
+    });
+
+    socket.on('agent:failed', (data: { error: string }) => {
+      setActiveStage('failed');
+      setStageMessage(`Agent failed: ${data.error}`);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -203,8 +244,21 @@ export default function WorkspaceQueryPage() {
     setExecuting(true);
     setQueryError(null);
 
+    // Clear previous state
+    setQueryId(null);
+    setFields([]);
+    setRows([]);
+    setChartType('');
+    setQueryPlan('');
+    setGeneratedSql('');
+    setExplanation('');
+    setAgentSteps([]);
+    setAgentAnswer(null);
+
+    const endpoint = agentMode ? 'agent' : 'query';
+
     try {
-      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/query`, {
+      const res = await fetch(`http://localhost:4000/api/workspaces/${workspaceId}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -220,14 +274,18 @@ export default function WorkspaceQueryPage() {
       if (!res.ok) {
         setQueryError(data.error || 'Failed to execute query.');
       } else {
-        // Load data returned synchronously
-        setFields(data.result?.fields || []);
-        setRows(data.result?.rows || []);
-        setTruncated(data.result?.truncated || false);
-        setChartType(data.chartType || 'table');
-        setQueryPlan(data.queryPlan || '');
-        setGeneratedSql(data.sql || '');
-        setExplanation(data.explanation || '');
+        if (agentMode) {
+          setAgentAnswer(data.answer || '');
+        } else {
+          // Load data returned synchronously for regular queries
+          setFields(data.result?.fields || []);
+          setRows(data.result?.rows || []);
+          setTruncated(data.result?.truncated || false);
+          setChartType(data.chartType || 'table');
+          setQueryPlan(data.queryPlan || '');
+          setGeneratedSql(data.sql || '');
+          setExplanation(data.explanation || '');
+        }
       }
     } catch (err) {
       setQueryError('API Connection failed. Ensure the server is running.');
@@ -361,16 +419,30 @@ export default function WorkspaceQueryPage() {
               <Sparkles className="w-5 h-5 text-cyan-400 mr-2" />
               Ask QueryMind Anything
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
-              Write plain English questions to crawl matching database schemas, validate, and execute.
-            </p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-slate-400">
+                Write plain English questions to crawl matching database schemas, validate, and execute.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAgentMode(!agentMode)}
+                className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                  agentMode
+                    ? 'bg-cyan-400/10 border-cyan-400/20 text-cyan-400 hover:bg-cyan-400/20'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>{agentMode ? 'AI Agent Mode' : 'Standard Mode'}</span>
+              </button>
+            </div>
             <form onSubmit={handleQuerySubmit} className="space-y-4">
               <div className="relative">
                 <input
                   type="text"
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="e.g. show me top 10 users by created date"
+                  placeholder={agentMode ? "e.g. why did electronics revenue drop in March?" : "e.g. show me top 10 users by created date"}
                   className="w-full glass-input rounded-xl pl-4 pr-12 py-3.5 text-sm text-slate-200 focus:outline-none placeholder-slate-600"
                   disabled={executing}
                   required
@@ -389,6 +461,11 @@ export default function WorkspaceQueryPage() {
               </div>
             </form>
           </div>
+
+          {/* Agent Mode Logs */}
+          {agentMode && (agentSteps.length > 0 || executing || agentAnswer) && (
+            <AgentSteps steps={agentSteps} finalAnswer={agentAnswer} executing={executing} />
+          )}
 
           {/* Query Error log panel */}
           {queryError && (
@@ -415,18 +492,18 @@ export default function WorkspaceQueryPage() {
           )}
 
           {/* AI query plan streaming logs */}
-          {queryPlan && <QueryPlanSteps plan={queryPlan} activeStage={activeStage} />}
+          {!agentMode && queryPlan && <QueryPlanSteps plan={queryPlan} activeStage={activeStage} />}
 
           {/* SQL Monaco code viewer panel */}
-          {generatedSql && <SQLViewer sql={generatedSql} explanation={explanation} />}
+          {!agentMode && generatedSql && <SQLViewer sql={generatedSql} explanation={explanation} />}
 
           {/* Dynamic Recharts recommendations panel */}
-          {chartType && chartType !== 'table' && rows.length > 0 && (
+          {!agentMode && chartType && chartType !== 'table' && rows.length > 0 && (
             <ChartRenderer chartType={chartType} fields={fields} rows={rows} />
           )}
 
           {/* Query result data grid */}
-          {(fields.length > 0 || rows.length > 0) && (
+          {!agentMode && (fields.length > 0 || rows.length > 0) && (
             <ResultTable
               fields={fields}
               rows={rows}
@@ -435,7 +512,7 @@ export default function WorkspaceQueryPage() {
           )}
 
           {/* RLHF Feedbacks panel */}
-          {queryId && activeStage === 'completed' && (
+          {!agentMode && queryId && activeStage === 'completed' && (
             <FeedbackCard workspaceId={workspaceId} queryId={queryId} />
           )}
         </div>

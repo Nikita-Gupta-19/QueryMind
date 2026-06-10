@@ -11,6 +11,7 @@ import { validateSQL } from './validator';
 import { executeQuery } from './executor';
 import { cacheGet, cacheSet } from '../../lib/redis';
 import { resolveGlossaryTerms, buildGlossaryContext } from './glossary-resolver';
+import { queriesExecutedCounter, cacheHitsCounter, queryExecutionDuration } from '../../lib/metrics';
 
 const router = Router({ mergeParams: true });
 
@@ -97,6 +98,7 @@ router.post(
       const cached = await cacheGet(cacheKey);
 
       if (cached) {
+        cacheHitsCounter.inc();
         const cachedResult = JSON.parse(cached);
         // Update query record as cache hit
         await prisma.queryHistory.update({
@@ -242,6 +244,10 @@ router.post(
       const connectionString = decrypt(connection.encryptedConnString);
       const queryResult = await executeQuery(connectionString, connection.dbType, safeSQL);
 
+      // Record metrics
+      queriesExecutedCounter.inc({ status: 'success' });
+      queryExecutionDuration.observe(queryResult.executionMs / 1000);
+
       // ── Step 7: Determine chart type from result shape ─────────────────────
       const chartType = detectChartType(queryResult.fields, queryResult.rows);
 
@@ -332,6 +338,7 @@ router.post(
         })),
       });
     } catch (err: any) {
+      queriesExecutedCounter.inc({ status: 'failed' });
       // Mark query as failed
       await prisma.queryHistory.update({
         where: { id: queryId },
