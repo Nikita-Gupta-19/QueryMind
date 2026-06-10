@@ -88,6 +88,11 @@ app.use('/api/workspaces', dashboardRouter);  // e.g. /api/workspaces/:id/dashbo
 app.use('/api/workspaces', agentRouter);      // e.g. /api/workspaces/:id/agent
 app.use('/api/dashboards', dashboardRouter);  // e.g. /api/dashboards/share/:token
 
+// Root Route
+app.get('/', (_req: Request, res: Response) => {
+  return res.json({ message: 'QueryMind API Server is online', health: '/health', metrics: '/metrics' });
+});
+
 // Health Check Route
 app.get('/health', (_req: Request, res: Response) => {
   return res.json({ status: 'healthy', timestamp: new Date() });
