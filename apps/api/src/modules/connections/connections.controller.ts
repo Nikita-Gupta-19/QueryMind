@@ -116,6 +116,14 @@ router.post(
         },
       });
 
+      // Enqueue the schema embedding job automatically
+      try {
+        const { enqueueEmbedSchemaJob } = await import('../../jobs/embed-schema.job');
+        await enqueueEmbedSchemaJob({ connectionId: dbConn.id, workspaceId });
+      } catch (jobErr) {
+        console.error('[ConnectionsController] Failed to automatically enqueue schema embedding job:', jobErr);
+      }
+
       // Respond without the encrypted string
       return res.status(201).json({
         id: dbConn.id,
@@ -124,6 +132,7 @@ router.post(
         dbType: dbConn.dbType,
         createdAt: dbConn.createdAt,
       });
+
     } catch (err: any) {
       if (err.message && err.message.includes('Database connection failed')) {
         return res.status(400).json({ error: err.message, details: err.details });
