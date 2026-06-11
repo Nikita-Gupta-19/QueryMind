@@ -88,18 +88,7 @@ app.use('/api/workspaces', dashboardRouter);  // e.g. /api/workspaces/:id/dashbo
 app.use('/api/workspaces', agentRouter);      // e.g. /api/workspaces/:id/agent
 app.use('/api/dashboards', dashboardRouter);  // e.g. /api/dashboards/share/:token
 
-// Temporary clear-db endpoint for testing
-app.post('/api/debug/clear-db', async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { prisma } = await import('./config/db');
-    await prisma.$executeRawUnsafe(
-      `TRUNCATE TABLE "AuditLog", "DashboardItem", "Dashboard", "QueryCorrection", "QueryHistory", "GlossaryTerm", "schema_embeddings", "DbConnection", "WorkspaceMember", "Workspace", "Session", "User" CASCADE;`
-    );
-    return res.json({ success: true, message: 'Database cleared successfully!' });
-  } catch (err) {
-    return next(err);
-  }
-});
+
 
 // Root Route
 app.get('/', (_req: Request, res: Response) => {
