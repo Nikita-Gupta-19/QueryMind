@@ -74,7 +74,7 @@ router.post(
   '/:id/connections',
   authenticateJWT,
   requireWorkspaceRole([WorkspaceRole.OWNER, WorkspaceRole.ADMIN]),
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const { id: workspaceId } = req.params;
     const { name, dbType, connectionString } = req.body;
     const userId = (req as any).user.id;
@@ -154,10 +154,10 @@ router.post(
       });
 
     } catch (err: any) {
-      if (err.message && err.message.includes('Database connection failed')) {
-        return res.status(400).json({ error: err.message, details: err.details });
-      }
-      return next(err);
+      return res.status(400).json({
+        error: 'Failed to save database connection.',
+        details: err.message || err,
+      });
     }
   }
 );

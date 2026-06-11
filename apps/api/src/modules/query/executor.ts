@@ -57,6 +57,13 @@ async function executePostgresQuery(
   try {
     await client.connect();
 
+    // Dynamically retrieve active schema and set search_path if non-public
+    const schemaRes = await client.query<{ current_schema: string }>('SELECT current_schema();');
+    const activeSchema = schemaRes.rows[0]?.current_schema;
+    if (activeSchema && activeSchema !== 'public') {
+      await client.query(`SET search_path TO "${activeSchema}", public`);
+    }
+
     // Set statement timeout at session level for double enforcement
     await client.query(`SET statement_timeout = ${QUERY_TIMEOUT_MS}`);
 

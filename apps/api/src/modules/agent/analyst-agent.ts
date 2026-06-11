@@ -36,7 +36,22 @@ export async function runAnalystAgent(
   const connectionString = decrypt(conn.encryptedConnString);
 
   // 2. Prep schemas context (retrieved table list via RAG similarity)
-  const relevantTables = await retrieveRelevantSchema(question, connectionId, 5);
+  let relevantTables = await retrieveRelevantSchema(question, connectionId, 5);
+  if (relevantTables.length === 0) {
+    try {
+      console.log('[AnalystAgent] Schema embeddings not found. Triggering inline sync...');
+      const { syncSchemaInProcess } = await import('../schema/sync-schema.utils');
+      await syncSchemaInProcess(connectionId);
+      relevantTables = await retrieveRelevantSchema(question, connectionId, 5);
+    } catch (syncErr) {
+      console.error('[AnalystAgent] Dynamic inline schema sync failed:', syncErr);
+    }
+  }
+
+  if (relevantTables.length === 0) {
+    throw new Error('No schema embeddings found for this connection and fallback sync failed.');
+  }
+
   const schemaContext = buildSchemaContext(relevantTables);
 
   // 3. Initiate agent transcript history
