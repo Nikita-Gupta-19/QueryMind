@@ -129,7 +129,24 @@ router.post(
         });
       }
 
-      const relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+      let relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+
+      if (relevantTables.length === 0) {
+        try {
+          if (io) {
+            io.to(`workspace:${workspaceId}`).emit('query:progress', {
+              queryId,
+              stage: 'schema_sync',
+              message: 'Database schema not synced. Syncing schema dynamically now (can take a minute)...',
+            });
+          }
+          const { syncSchemaInProcess } = await import('../schema/sync-schema.utils');
+          await syncSchemaInProcess(connectionId);
+          relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+        } catch (syncErr: any) {
+          console.error('[QueryController] Dynamic inline schema sync failed:', syncErr);
+        }
+      }
 
       if (relevantTables.length === 0) {
         await prisma.queryHistory.update({

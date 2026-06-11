@@ -124,6 +124,15 @@ router.post(
         console.error('[ConnectionsController] Failed to automatically enqueue schema embedding job:', jobErr);
       }
 
+      // Also trigger in-process schema sync in the background so it doesn't block the API response
+      import('../schema/sync-schema.utils').then(({ syncSchemaInProcess }) => {
+        syncSchemaInProcess(dbConn.id).catch(syncErr => {
+          console.error('[ConnectionsController] Background in-process schema sync failed:', syncErr);
+        });
+      }).catch(err => {
+        console.error('[ConnectionsController] Failed to import syncSchemaInProcess:', err);
+      });
+
       // Respond without the encrypted string
       return res.status(201).json({
         id: dbConn.id,
