@@ -130,6 +130,7 @@ router.post(
       }
 
       let relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+      let syncError: string | null = null;
 
       if (relevantTables.length === 0) {
         try {
@@ -145,6 +146,7 @@ router.post(
           relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
         } catch (syncErr: any) {
           console.error('[QueryController] Dynamic inline schema sync failed:', syncErr);
+          syncError = syncErr.message || String(syncErr);
         }
       }
 
@@ -154,8 +156,10 @@ router.post(
           data: { status: QueryStatus.FAILED },
         });
         return res.status(422).json({
-          error: 'No schema embeddings found for this connection. Please trigger schema sync first.',
-          hint: 'POST /api/workspaces/:id/connections/:connId/sync-schema',
+          error: syncError 
+            ? `Failed to sync database schema: ${syncError}`
+            : 'No schema embeddings found for this connection. Please trigger schema sync first.',
+          hint: 'Ensure your database is online, reachable, and has available connection slots.',
         });
       }
 

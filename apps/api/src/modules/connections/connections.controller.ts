@@ -89,7 +89,18 @@ router.post(
 
     try {
       // 1. Verify the connection actually works before storing it
-      await verifyDatabaseConnection(connectionString, dbType as DbType);
+      try {
+        await verifyDatabaseConnection(connectionString, dbType as DbType);
+      } catch (connErr: any) {
+        if (connErr.code === '53300') {
+          console.warn('[ConnectionsController] Target database connection limit exceeded (53300), allowing save.');
+        } else {
+          return res.status(400).json({
+            error: 'Database connection verification failed.',
+            details: connErr.message || connErr,
+          });
+        }
+      }
 
       // 2. Encrypt connection string
       const encryptedConnString = encrypt(connectionString);
