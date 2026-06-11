@@ -32,9 +32,20 @@ export default function Home() {
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
+    const isTokenExpired = (t: string) => {
+      try {
+        const payload = JSON.parse(atob(t.split('.')[1]));
+        return payload.exp ? Date.now() >= payload.exp * 1000 : false;
+      } catch (err) {
+        return true;
+      }
+    };
+
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && !isTokenExpired(token)) {
       setHasSession(true);
+    } else {
+      localStorage.removeItem('token');
     }
     setCheckingSession(false);
   }, []);

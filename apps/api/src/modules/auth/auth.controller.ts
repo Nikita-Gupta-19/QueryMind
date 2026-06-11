@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'querymind_super_secret_jwt_sign_ke
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'querymind_super_secret_jwt_refresh_sign_key_456';
 
 // Expiry values
-const ACCESS_TOKEN_EXPIRY = '15m'; // 15 minutes
+const ACCESS_TOKEN_EXPIRY = (process.env.JWT_ACCESS_TOKEN_EXPIRY || (process.env.NODE_ENV === 'development' ? '24h' : '15m')) as any;
 const REFRESH_TOKEN_EXPIRY = '7d'; // 7 days
 
 // Helper to generate tokens

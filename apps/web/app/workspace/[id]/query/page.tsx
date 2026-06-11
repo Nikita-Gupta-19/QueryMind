@@ -155,18 +155,25 @@ export default function WorkspaceQueryPage() {
     } finally {
       setSavingConnection(false);
     }
-  };
-
-  // Auto-authenticate via Dev Bypass if no token is found in development
+  };  // Auto-authenticate via Dev Bypass if no token is found in development
   useEffect(() => {
+    const isTokenExpired = (t: string) => {
+      try {
+        const payload = JSON.parse(atob(t.split('.')[1]));
+        return payload.exp ? Date.now() >= payload.exp * 1000 : false;
+      } catch (err) {
+        return true;
+      }
+    };
+
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && !isTokenExpired(token)) {
       setAuthToken(token);
     } else {
+      localStorage.removeItem('token');
       handleDevBypassLogin();
     }
   }, []);
-
   const handleDevBypassLogin = async () => {
     try {
       const res = await fetch(`${API_URL}/api/auth/dev-login`, {

@@ -64,6 +64,11 @@ const io = new SocketIOServer(server, {
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
 
+  socket.on('workspace:join', ({ workspaceId }) => {
+    socket.join(`workspace:${workspaceId}`);
+    logger.info(`Socket ${socket.id} joined room workspace:${workspaceId}`);
+  });
+
   socket.on('disconnect', () => {
     logger.info(`Socket disconnected: ${socket.id}`);
   });
