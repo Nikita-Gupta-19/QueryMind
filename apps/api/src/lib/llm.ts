@@ -35,19 +35,25 @@ function mockGenerateText(prompt: string): string {
         params: {}
       });
     } else if (turnCount === 2) {
+      // Dynamically extract the first table name from the retrieved schema output in prompt
+      const tableMatch = prompt.match(/Table:\s*([a-zA-Z0-9_\-]+)/i);
+      const tableName = tableMatch ? tableMatch[1] : 'users';
       return JSON.stringify({
-        thought: "The schema is loaded. I see relevant data tables. Let me run a query to inspect the records.",
+        thought: `The schema is loaded. I see relevant data tables like ${tableName}. Let me run a query to inspect the records.`,
         action: "run_query",
         params: {
-          sql: "SELECT * FROM users LIMIT 5;"
+          sql: `SELECT * FROM ${tableName} LIMIT 5;`
         }
       });
     } else {
+      // Dynamically extract the table name that was queried in the previous turn
+      const sqlMatch = prompt.match(/SELECT \* FROM ([a-zA-Z0-9_\-]+)/i);
+      const tableName = sqlMatch ? sqlMatch[1] : 'users';
       return JSON.stringify({
-        thought: "I have examined the query results and synthesized the final analysis.",
+        thought: `I have examined the query results from the ${tableName} table and synthesized the final analysis.`,
         action: "finish",
         params: {
-          answer: "The data shows consistent updates, with user registrations growing by 15% week-over-week. No anomalous changes detected."
+          answer: `The query results from the ${tableName} table show active updates and correct mapping schemas. No anomalous data-drift changes or corrupted records were detected.`
         }
       });
     }

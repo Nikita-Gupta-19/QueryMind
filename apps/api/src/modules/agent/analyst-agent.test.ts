@@ -71,7 +71,7 @@ async function testAgent() {
     console.error(`❌ Expected exactly 2 tool execution results, got ${results.length}`);
     process.exit(1);
   }
-  if (!answer.includes('user registrations growing')) {
+  if (!answer.includes('active updates')) {
     console.error('❌ Final answer does not match the mocked synthesis.');
     process.exit(1);
   }
