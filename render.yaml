@@ -6,7 +6,7 @@ services:
     dockerContext: apps/api
     dockerfilePath: apps/api/Dockerfile
     plan: free
-    preDeployCommand: npx prisma db push --accept-data-loss
+    # preDeployCommand is not supported on free tier, migrations will run on start
     envVars:
 
       - key: PORT
