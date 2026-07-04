@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Table } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Table, Download } from 'lucide-react';
 
 interface ResultTableProps {
   fields: string[];
@@ -36,6 +36,36 @@ export default function ResultTable({ fields, rows, rowCount, truncated }: Resul
   const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
   const paginatedRows = rows.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
+  const handleDownloadCsv = () => {
+    if (!fields || !rows || rows.length === 0) return;
+    
+    // Construct CSV header
+    const csvHeader = fields.map(f => `"${f.replace(/"/g, '""')}"`).join(',');
+    
+    // Construct CSV rows
+    const csvRows = rows.map(row => 
+      fields.map(field => {
+        let val = row[field];
+        if (val === null || val === undefined) return '""';
+        if (typeof val === 'object') val = JSON.stringify(val);
+        // Escape quotes
+        return `"${String(val).replace(/"/g, '""')}"`;
+      }).join(',')
+    );
+    
+    const csvString = [csvHeader, ...csvRows].join('\n');
+    
+    // Create and trigger download
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `query_results_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 overflow-hidden mb-6 animate-fade-in">
       <div className="flex items-center justify-between px-5 py-4 bg-slate-900/50 border-b border-slate-800/80">
@@ -45,11 +75,20 @@ export default function ResultTable({ fields, rows, rowCount, truncated }: Resul
             Data Results ({rows.length} rows {truncated ? 'previewed' : ''})
           </span>
         </div>
-        {truncated && (
-          <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-full">
-            Truncated to first 1000 rows
-          </span>
-        )}
+        <div className="flex items-center space-x-3">
+          {truncated && (
+            <span className="text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-full">
+              Truncated to first 1000 rows
+            </span>
+          )}
+          <button
+            onClick={handleDownloadCsv}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-medium transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>CSV Export</span>
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">

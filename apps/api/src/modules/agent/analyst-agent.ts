@@ -25,7 +25,8 @@ export async function runAnalystAgent(
   connectionId: string,
   workspaceId: string,
   onStep: (step: AgentStep) => void,
-  onResult: (result: ToolResult) => void
+  onResult: (result: ToolResult) => void,
+  customApiKey?: string
 ): Promise<string> {
   // 1. Fetch connection details
   const conn = await prisma.dbConnection.findFirst({
@@ -36,13 +37,13 @@ export async function runAnalystAgent(
   const connectionString = decrypt(conn.encryptedConnString);
 
   // 2. Prep schemas context (retrieved table list via RAG similarity)
-  let relevantTables = await retrieveRelevantSchema(question, connectionId, 5);
+  let relevantTables = await retrieveRelevantSchema(question, connectionId, 5, customApiKey);
   if (relevantTables.length === 0) {
     try {
       console.log('[AnalystAgent] Schema embeddings not found. Triggering inline sync...');
       const { syncSchemaInProcess } = await import('../schema/sync-schema.utils');
       await syncSchemaInProcess(connectionId);
-      relevantTables = await retrieveRelevantSchema(question, connectionId, 5);
+      relevantTables = await retrieveRelevantSchema(question, connectionId, 5, customApiKey);
     } catch (syncErr) {
       console.error('[AnalystAgent] Dynamic inline schema sync failed:', syncErr);
     }
@@ -73,6 +74,8 @@ You must decide which SQL queries to execute, examine the results, and compile a
 - You must write SELECT statements only. Do NOT attempt write or modify operations.
 - Qualify column names with table names when joining.
 - Keep output row counts limited.
+- IMPORTANT: PostgreSQL is case-sensitive for quoted identifiers. If a table is named "User" (with a capital U), you MUST quote it like SELECT * FROM "User", otherwise PostgreSQL will query the current_user system variable.
+- If a query fails with an error, DO NOT hallucinate a successful response. You must either fix the SQL and try again, or use 'finish' to tell the user the query failed.
 
 ## Output Format:
 You MUST respond with a single valid JSON object containing thought, action, and params. No markdown blocks, no prefixing text.
@@ -82,6 +85,9 @@ Format Example:
   "action": "get_schema",
   "params": {}
 }
+
+## Final Answer Guidelines:
+When using the 'finish' action, your answer MUST directly address the user's question using the exact data rows you retrieved. Do NOT use generic analyst jargon (e.g., "no data drift detected"). Just answer the question clearly (e.g. "Here are the users I found: Nikita, John, ...").
 `;
 
   conversationHistory.push({ role: 'user', parts: systemPrompt });
@@ -99,7 +105,7 @@ Format Example:
       .map((h) => `${h.role === 'user' ? 'User' : 'Model'}: ${h.parts}`)
       .join('\n\n') + '\n\nModel:';
 
-    let rawResponse = await generateText(prompt);
+    let rawResponse = await generateText(prompt, customApiKey);
 
     // Parse output JSON block
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);

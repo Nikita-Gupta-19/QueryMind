@@ -18,10 +18,11 @@ export interface RetrievedTable {
 export async function retrieveRelevantSchema(
   question: string,
   connectionId: string,
-  topK: number = 5
+  topK: number = 5,
+  customApiKey?: string
 ): Promise<RetrievedTable[]> {
   // 1. Embed the user's question
-  const questionEmbedding = await generateEmbedding(question);
+  const questionEmbedding = await generateEmbedding(question, customApiKey);
   const embeddingStr = `[${questionEmbedding.join(',')}]`;
 
   // 2. Cosine similarity search via pgvector
@@ -69,8 +70,8 @@ export function buildSchemaContext(tables: RetrievedTable[]): string {
 
   return tables
     .map((t) => {
-      const cols = t.columnNames.join(', ');
-      return `Table: ${t.tableName}\nColumns: ${cols}\nDescription: ${t.description}`;
+      const cols = t.columnNames.map(c => `"${c}"`).join(', ');
+      return `Table: "${t.tableName}"\nColumns: ${cols}\nDescription: ${t.description}`;
     })
     .join('\n\n');
 }

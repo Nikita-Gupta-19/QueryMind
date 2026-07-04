@@ -71,8 +71,21 @@ export default function AgentSteps({ steps, finalAnswer, executing }: AgentSteps
                 {hasError ? (
                   <p className="font-mono text-[10px]">{trace.output.error}</p>
                 ) : (
-                  <div className="bg-slate-950/40 p-2 rounded-lg border border-slate-900/60 font-mono text-[10px] text-slate-400 whitespace-pre-wrap overflow-x-auto max-h-[120px]">
-                    {JSON.stringify(trace.output, null, 2)}
+                  <div className="bg-slate-950/40 p-2 rounded-lg border border-slate-900/60 font-mono text-[10px] text-slate-400 whitespace-pre-wrap overflow-hidden max-h-[120px]">
+                    {trace.action === 'get_schema' ? (
+                      <span className="text-emerald-400/80">Successfully retrieved database schema structure for relevant tables.</span>
+                    ) : trace.action === 'run_query' && trace.output?.rows ? (
+                      <div className="space-y-1">
+                        <span className="text-emerald-400/80">Executed query successfully. Returned {trace.output.rowCount} rows.</span>
+                        {trace.output.rows.length > 0 && (
+                          <div className="text-[9px] text-slate-500 truncate mt-1">
+                            Preview: {JSON.stringify(trace.output.rows[0])}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      JSON.stringify(trace.output, null, 2)
+                    )}
                   </div>
                 )}
               </div>

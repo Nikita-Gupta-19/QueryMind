@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: pgvector/pgvector:16-pgdg
+    image: pgvector/pgvector:pg16
     container_name: querymind-postgres
     restart: always
     environment:
@@ -24,7 +24,7 @@ services:
     container_name: querymind-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -52,6 +52,26 @@ services:
       DEV_AUTH_BYPASS: "true"
     ports:
       - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: querymind-worker
+    restart: always
+    command: npm run worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://querymind:querymind_password@db:5432/querymind_db?schema=public
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: "637573746f6d65727365676d656e74656e6372797074696f6e6b6579666f7261"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     depends_on:
       db:
         condition: service_healthy

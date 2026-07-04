@@ -50,6 +50,36 @@ services:
         sync: false
         placeholder: "Enter public API URL (e.g. https://querymind-api-uz5w.onrender.com) after creation"
 
+  # 4. Background Worker Service
+  - type: worker
+    name: querymind-worker
+    runtime: docker
+    dockerContext: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    dockerCommand: npm run worker
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: querymind-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: querymind-redis
+          property: connectionString
+      - key: ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: querymind-api
+          envVarKey: ENCRYPTION_KEY
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
   # 3. Redis Service (KeyValue store)
   - type: keyvalue
     name: querymind-redis

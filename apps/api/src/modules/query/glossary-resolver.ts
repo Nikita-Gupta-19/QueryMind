@@ -16,7 +16,8 @@ export async function resolveGlossaryTerms(
   question: string,
   workspaceId: string,
   topK: number = 3,
-  similarityThreshold: number = 0.5
+  similarityThreshold: number = 0.5,
+  customApiKey?: string
 ): Promise<MappedGlossaryTerm[]> {
   try {
     // 1. Check if there are any glossary terms in this workspace first
@@ -28,7 +29,7 @@ export async function resolveGlossaryTerms(
     // 2. Embed the question
     let questionEmbedding: number[];
     try {
-      questionEmbedding = await generateEmbedding(question);
+      questionEmbedding = await generateEmbedding(question, customApiKey);
     } catch (err) {
       console.warn('[GlossaryResolver] Failed to generate embedding for question. Skipping glossary resolution.', err);
       return [];

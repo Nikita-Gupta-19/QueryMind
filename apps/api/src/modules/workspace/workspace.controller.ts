@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { WorkspaceRole } from '@prisma/client';
 import prisma from '../../config/db';
 import { authenticateJWT } from '../../middleware/auth.middleware';
+import { encryptString } from '../../lib/encryption';
 
 const router = Router();
 
@@ -166,7 +167,18 @@ router.get('/:id', authenticateJWT, requireWorkspaceRole([WorkspaceRole.OWNER, W
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    return res.json(workspace);
+    // Mask keys before returning to frontend
+    const workspaceData = {
+      ...workspace,
+      hasGeminiKey: !!workspace.encryptedGeminiKey,
+      hasOpenAiKey: !!workspace.encryptedOpenAiKey,
+    };
+    
+    // Remove actual encrypted keys from the response
+    delete (workspaceData as any).encryptedGeminiKey;
+    delete (workspaceData as any).encryptedOpenAiKey;
+
+    return res.json(workspaceData);
   } catch (err) {
     return next(err);
   }
@@ -200,6 +212,42 @@ router.put('/:id', authenticateJWT, requireWorkspaceRole([WorkspaceRole.OWNER, W
     });
 
     return res.json(updated);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// 4.5. Update API Keys
+router.put('/:id/keys', authenticateJWT, requireWorkspaceRole([WorkspaceRole.OWNER, WorkspaceRole.ADMIN]), async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params;
+  const { geminiApiKey, openAiApiKey } = req.body;
+  const userId = (req as any).user.id;
+
+  try {
+    const dataToUpdate: any = {};
+    if (geminiApiKey !== undefined) {
+      dataToUpdate.encryptedGeminiKey = geminiApiKey ? encryptString(geminiApiKey) : null;
+    }
+    if (openAiApiKey !== undefined) {
+      dataToUpdate.encryptedOpenAiKey = openAiApiKey ? encryptString(openAiApiKey) : null;
+    }
+
+    await prisma.workspace.update({
+      where: { id },
+      data: dataToUpdate,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: id,
+        userId,
+        action: 'UPDATE_WORKSPACE_KEYS',
+        resourceType: 'WORKSPACE',
+        resourceId: id,
+      },
+    });
+
+    return res.json({ message: 'Workspace keys updated successfully' });
   } catch (err) {
     return next(err);
   }

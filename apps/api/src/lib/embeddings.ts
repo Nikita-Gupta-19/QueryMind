@@ -1,29 +1,24 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-let openaiClient: OpenAI | null = null;
-
-function getClient(): OpenAI | null {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return null;
-    }
-    openaiClient = new OpenAI({ apiKey });
+function getClient(customApiKey?: string): GoogleGenerativeAI | null {
+  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return null;
   }
-  return openaiClient;
+  return new GoogleGenerativeAI(apiKey);
 }
 
 /**
- * Generate a deterministic 1536-dimension unit-normalized mock embedding vector for testing.
+ * Generate a deterministic 3072-dimension unit-normalized mock embedding vector for testing.
  */
 function generateMockEmbedding(text: string): number[] {
-  const embedding: number[] = new Array(1536).fill(0);
+  const embedding: number[] = new Array(3072).fill(0);
   let hash = 0;
   for (let i = 0; i < text.length; i++) {
     hash = text.charCodeAt(i) + ((hash << 5) - hash);
   }
   
-  for (let i = 0; i < 1536; i++) {
+  for (let i = 0; i < 3072; i++) {
     const angle = ((hash + i) * 180) / Math.PI;
     embedding[i] = Math.sin(angle);
   }
@@ -33,54 +28,47 @@ function generateMockEmbedding(text: string): number[] {
 }
 
 /**
- * Generate a 1536-dimension embedding vector for the given text.
- * Uses OpenAI text-embedding-3-small model, with fallback to mock embeddings if key is missing.
+ * Generate a 3072-dimension embedding vector for the given text.
+ * Uses Gemini gemini-embedding-2 model, with fallback to mock embeddings if key is missing.
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const client = getClient();
+export async function generateEmbedding(text: string, customApiKey?: string): Promise<number[]> {
+  const client = getClient(customApiKey);
   if (!client) {
-    console.warn('OPENAI_API_KEY is not defined. Using deterministic mock embedding.');
+    console.warn('GEMINI_API_KEY is not defined. Using deterministic mock embedding.');
     return generateMockEmbedding(text);
   }
 
-  const response = await client.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text,
-    dimensions: 1536,
-  });
+  const model = client.getGenerativeModel({ model: 'gemini-embedding-2' });
+  const result = await model.embedContent(text);
 
-  return response.data[0].embedding;
+  return result.embedding.values;
 }
 
 /**
  * Generate embeddings for multiple texts in a single API call (batch).
  * More cost-efficient for schema crawling.
  */
-export async function generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+export async function generateEmbeddingsBatch(texts: string[], customApiKey?: string): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const client = getClient();
+  const client = getClient(customApiKey);
   if (!client) {
-    console.warn('OPENAI_API_KEY is not defined. Using batch deterministic mock embeddings.');
+    console.warn('GEMINI_API_KEY is not defined. Using batch deterministic mock embeddings.');
     return texts.map(t => generateMockEmbedding(t));
   }
 
+  const model = client.getGenerativeModel({ model: 'gemini-embedding-2' });
+  const requests = texts.map(t => ({ content: { role: 'user', parts: [{ text: t }] } }));
+  
   const BATCH_SIZE = 100;
   const allEmbeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE);
-    const response = await client.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: batch,
-      dimensions: 1536,
-    });
-
-    // Sort by index to ensure order matches input
-    const sorted = response.data.sort((a, b) => a.index - b.index);
-    allEmbeddings.push(...sorted.map((item) => item.embedding));
+  for (let i = 0; i < requests.length; i += BATCH_SIZE) {
+    const batch = requests.slice(i, i + BATCH_SIZE);
+    const result = await model.batchEmbedContents({ requests: batch });
+    const batchEmbeddings = result.embeddings.map(e => e.values);
+    allEmbeddings.push(...batchEmbeddings);
   }
 
   return allEmbeddings;
 }
-

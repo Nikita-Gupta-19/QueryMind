@@ -5,6 +5,7 @@ import { authenticateJWT } from '../../middleware/auth.middleware';
 import { requireWorkspaceRole } from '../workspace/workspace.controller';
 import { runAnalystAgent } from './analyst-agent';
 import { agentRunsCounter } from '../../lib/metrics';
+import { decryptString } from '../../lib/encryption';
 
 const router = Router();
 
@@ -30,6 +31,12 @@ router.post(
     const trimmedQuestion = question.trim();
 
     try {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { encryptedGeminiKey: true }
+      });
+      const customGeminiKey = workspace?.encryptedGeminiKey ? decryptString(workspace.encryptedGeminiKey) : undefined;
+
       agentRunsCounter.inc({ status: 'started' });
 
       // Emit start event
@@ -52,7 +59,8 @@ router.post(
           if (io) {
             io.to(`workspace:${workspaceId}`).emit('agent:result', { result });
           }
-        }
+        },
+        customGeminiKey
       );
 
       // Audit Log

@@ -16,8 +16,6 @@ import queryRouter from './modules/query/query.controller';
 import glossaryRouter from './modules/glossary/glossary.controller';
 import dashboardRouter from './modules/dashboard/dashboard.controller';
 import agentRouter from './modules/agent/agent.controller';
-import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
-import { startDetectDriftWorker, scheduleDailyDriftChecks } from './jobs/detect-drift.job';
 import { prometheusRegistry } from './lib/metrics';
 
 const app = express();
@@ -134,15 +132,6 @@ const PORT = process.env.PORT || 4000;
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
     logger.info(`QueryMind API server running on port ${PORT}`);
-
-    // Start BullMQ workers
-    startEmbedSchemaWorker();
-    logger.info('BullMQ embed-schema worker started');
-
-    startDetectDriftWorker();
-    logger.info('BullMQ detect-drift worker started');
-
-    scheduleDailyDriftChecks().catch((err) => logger.error('Failed to schedule daily drift checks:', err));
   });
 }
 

@@ -5,8 +5,9 @@ import prisma from '../../config/db';
 import { authenticateJWT } from '../../middleware/auth.middleware';
 import { requireWorkspaceRole } from '../workspace/workspace.controller';
 import { decrypt } from '../connections/crypto.utils';
+import { decryptString } from '../../lib/encryption';
 import { retrieveRelevantSchema, buildSchemaContext } from './rag';
-import { generateSQL, generateQueryPlan } from './generator';
+import { generateSQL, generateEdaSQL, generateQueryPlan } from './generator';
 import { validateSQL } from './validator';
 import { executeQuery } from './executor';
 import { cacheGet, cacheSet } from '../../lib/redis';
@@ -45,7 +46,7 @@ function buildCacheKey(question: string, connectionId: string): string {
  * 9. Cache result & return
  */
 router.post(
-  '/:id/query',
+  ['/:id/query', '/:id/eda'],
   authenticateJWT,
   requireWorkspaceRole([WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.ANALYST]),
   async (req: Request, res: Response, next: NextFunction) => {
@@ -68,11 +69,16 @@ router.post(
     // ── Verify connection belongs to this workspace ─────────────────────────
     const connection = await prisma.dbConnection.findFirst({
       where: { id: connectionId, workspaceId },
+      include: {
+        workspace: true
+      }
     });
 
     if (!connection) {
       return res.status(404).json({ error: 'Database connection not found in this workspace.' });
     }
+    
+    const customGeminiKey = connection.workspace.encryptedGeminiKey ? decryptString(connection.workspace.encryptedGeminiKey) : undefined;
 
     // ── Create a RUNNING query history entry early (for real-time tracking) ──
     const queryRecord = await prisma.queryHistory.create({
@@ -129,7 +135,7 @@ router.post(
         });
       }
 
-      let relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+      let relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5, customGeminiKey);
       let syncError: string | null = null;
 
       if (relevantTables.length === 0) {
@@ -143,7 +149,7 @@ router.post(
           }
           const { syncSchemaInProcess } = await import('../schema/sync-schema.utils');
           await syncSchemaInProcess(connectionId);
-          relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5);
+          relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5, customGeminiKey);
         } catch (syncErr: any) {
           console.error('[QueryController] Dynamic inline schema sync failed:', syncErr);
           syncError = syncErr.message || String(syncErr);
@@ -166,7 +172,7 @@ router.post(
       const schemaContext = buildSchemaContext(relevantTables);
 
       // ── Step 2.5: Resolve business glossary terms ──────────────────────────
-      const glossaryTerms = await resolveGlossaryTerms(trimmedQuestion, workspaceId);
+      const glossaryTerms = await resolveGlossaryTerms(trimmedQuestion, workspaceId, 3, 0.5, customGeminiKey);
       const glossaryContext = buildGlossaryContext(glossaryTerms);
 
       // ── Step 3: Generate query plan (streamed via Socket.IO) ───────────────
@@ -178,7 +184,7 @@ router.post(
         });
       }
 
-      const queryPlan = await generateQueryPlan(trimmedQuestion, schemaContext);
+      const queryPlan = await generateQueryPlan(trimmedQuestion, schemaContext, customGeminiKey);
 
       if (io) {
         io.to(`workspace:${workspaceId}`).emit('query:plan', {
@@ -196,15 +202,18 @@ router.post(
         });
       }
 
-      const { sql: rawSQL, explanation, confidence } = await generateSQL(
+      const isEda = req.path.endsWith('/eda');
+      const generateFn = isEda ? generateEdaSQL : generateSQL;
+      const { sql: rawSQL, explanation, confidence } = await generateFn(
         trimmedQuestion,
         schemaContext,
         connection.dbType as 'POSTGRES' | 'MYSQL',
-        glossaryContext
+        glossaryContext,
+        customGeminiKey
       );
 
       // ── Step 5: 4-layer SQL safety validation ──────────────────────────────
-      const validation = validateSQL(rawSQL);
+      const validation = validateSQL(rawSQL, { isEda });
 
       if (!validation.valid) {
         // Log rejection to audit_logs
@@ -467,7 +476,7 @@ function detectChartType(fields: string[], rows: Record<string, unknown>[]): str
   if (rows.length === 1 && fields.length === 1) return 'kpi';
   if (fields.length === 1) return 'bar';
 
-  if (fields.length === 2) {
+  if (fields.length >= 2) {
     const firstVal = rows[0][fields[0]];
     const secondVal = rows[0][fields[1]];
 
@@ -482,6 +491,9 @@ function detectChartType(fields: string[], rows: Record<string, unknown>[]): str
         /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(firstStr);
 
       if (looksLikeDate) return 'line';
+
+      // If we have 3+ columns, default to line chart to show multiple series (or bar chart if short).
+      if (fields.length > 2) return rows.length <= 10 ? 'bar' : 'line';
 
       // Pie for small categorical data, bar for larger
       return rows.length <= 10 ? 'pie' : 'bar';

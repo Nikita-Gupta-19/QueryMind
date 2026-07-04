@@ -16,6 +16,10 @@ import {
   Menu,
   X,
   Plus,
+  TrendingUp,
+  Layout,
+  BookOpen,
+  Settings,
 } from 'lucide-react';
 
 import QueryPlanSteps from '../../../../components/query/QueryPlanSteps';
@@ -61,7 +65,7 @@ export default function WorkspaceQueryPage() {
   const [queryId, setQueryId] = useState<string | null>(null);
 
   // Agent Mode States
-  const [agentMode, setAgentMode] = useState(false);
+  const [queryMode, setQueryMode] = useState<'standard' | 'eda' | 'agent'>('standard');
   const [agentSteps, setAgentSteps] = useState<AgentStepTrace[]>([]);
   const [agentAnswer, setAgentAnswer] = useState<string | null>(null);
   
@@ -88,6 +92,16 @@ export default function WorkspaceQueryPage() {
   const [savingConnection, setSavingConnection] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+
+  // Save to Dashboard Modal States
+  const [showSaveDashboardModal, setShowSaveDashboardModal] = useState(false);
+  const [dashboardsList, setDashboardsList] = useState<any[]>([]);
+  const [loadingDashboards, setLoadingDashboards] = useState(false);
+  const [selectedDashboardId, setSelectedDashboardId] = useState('');
+  const [savingToDashboard, setSavingToDashboard] = useState(false);
+  const [saveDashboardError, setSaveDashboardError] = useState<string | null>(null);
+  const [saveDashboardSuccess, setSaveDashboardSuccess] = useState<string | null>(null);
+  const [newDashboardName, setNewDashboardName] = useState('');
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -154,6 +168,89 @@ export default function WorkspaceQueryPage() {
       setModalError('Failed to contact API server for saving.');
     } finally {
       setSavingConnection(false);
+    }
+  };
+
+  const fetchDashboardsForModal = async () => {
+    setLoadingDashboards(true);
+    setSaveDashboardError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards`, {
+        headers: { Authorization: `Bearer ${authToken || localStorage.getItem('token')}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardsList(data.dashboards || []);
+        if (data.dashboards && data.dashboards.length > 0) {
+          setSelectedDashboardId(data.dashboards[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching dashboards:', err);
+    } finally {
+      setLoadingDashboards(false);
+    }
+  };
+
+  const handleSaveToDashboard = async () => {
+    if (!queryId) return;
+    setSavingToDashboard(true);
+    setSaveDashboardError(null);
+    setSaveDashboardSuccess(null);
+
+    let targetDashboardId = selectedDashboardId;
+
+    try {
+      const token = authToken || localStorage.getItem('token');
+      // Create new dashboard if name is specified
+      if (newDashboardName.trim()) {
+        const createRes = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ name: newDashboardName.trim() }),
+        });
+        if (!createRes.ok) {
+          const errData = await createRes.json();
+          throw new Error(errData.error || 'Failed to create new dashboard.');
+        }
+        const newDash = await createRes.json();
+        targetDashboardId = newDash.id;
+      }
+
+      if (!targetDashboardId) {
+        throw new Error('Please select or create a dashboard.');
+      }
+
+      const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/dashboards/${targetDashboardId}/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          queryHistoryId: queryId,
+          chartType: chartType || 'table',
+        }),
+      });
+
+      if (res.ok) {
+        setSaveDashboardSuccess('Saved to dashboard successfully!');
+        setNewDashboardName('');
+        setTimeout(() => {
+          setShowSaveDashboardModal(false);
+          setSaveDashboardSuccess(null);
+        }, 1500);
+      } else {
+        const errData = await res.json();
+        setSaveDashboardError(errData.error || 'Failed to save to dashboard.');
+      }
+    } catch (err: any) {
+      setSaveDashboardError(err.message || 'Error occurred.');
+    } finally {
+      setSavingToDashboard(false);
     }
   };  // Auto-authenticate via Dev Bypass if no token is found in development
   useEffect(() => {
@@ -346,7 +443,7 @@ export default function WorkspaceQueryPage() {
     setAgentSteps([]);
     setAgentAnswer(null);
 
-    const endpoint = agentMode ? 'agent' : 'query';
+    const endpoint = queryMode === 'agent' ? 'agent' : (queryMode === 'eda' ? 'eda' : 'query');
 
     try {
       const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/${endpoint}`, {
@@ -363,9 +460,11 @@ export default function WorkspaceQueryPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setQueryError(data.error || 'Failed to execute query.');
+        let errMsg = data.error || 'Failed to execute query.';
+        if (data.rejectionReason) errMsg += `\nReason: ${data.rejectionReason}`;
+        setQueryError(errMsg);
       } else {
-        if (agentMode) {
+        if (queryMode === 'agent') {
           setAgentAnswer(data.answer || '');
         } else {
           // Load data returned synchronously for regular queries
@@ -418,6 +517,31 @@ export default function WorkspaceQueryPage() {
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 md:hidden transition-all"
           >
             <X className="w-4 h-4" />
+          </button>
+        </div>
+ 
+        {/* Navigation list */}
+        <div className="p-4 border-b border-slate-900 space-y-1">
+          <button
+            onClick={() => router.push(`/workspace/${workspaceId}/dashboards`)}
+            className="w-full flex items-center space-x-3 px-4 py-2 rounded-xl hover:bg-slate-900/60 transition-all text-xs text-slate-400 hover:text-white font-medium"
+          >
+            <Layout className="w-4 h-4 text-cyan-400" />
+            <span>Dashboards</span>
+          </button>
+          <button
+            onClick={() => router.push(`/workspace/${workspaceId}/glossary`)}
+            className="w-full flex items-center space-x-3 px-4 py-2 rounded-xl hover:bg-slate-900/60 transition-all text-xs text-slate-400 hover:text-white font-medium"
+          >
+            <BookOpen className="w-4 h-4 text-indigo-400" />
+            <span>Business Glossary</span>
+          </button>
+          <button
+            onClick={() => router.push(`/workspace/${workspaceId}/settings`)}
+            className="w-full flex items-center space-x-3 px-4 py-2 rounded-xl hover:bg-slate-900/60 transition-all text-xs text-slate-400 hover:text-white font-medium"
+          >
+            <Settings className="w-4 h-4 text-slate-400" />
+            <span>Settings</span>
           </button>
         </div>
 
@@ -546,18 +670,46 @@ export default function WorkspaceQueryPage() {
               <p className="text-xs text-slate-400">
                 Write plain English questions to crawl matching database schemas, validate, and execute.
               </p>
-              <button
-                type="button"
-                onClick={() => setAgentMode(!agentMode)}
-                className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
-                  agentMode
-                    ? 'bg-cyan-400/10 border-cyan-400/20 text-cyan-400 hover:bg-cyan-400/20'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>{agentMode ? 'AI Agent Mode' : 'Standard Mode'}</span>
-              </button>
+              
+              <div className="flex bg-slate-900/50 p-1 rounded-xl border border-slate-800/60 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setQueryMode('standard')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                    queryMode === 'standard'
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Database className="w-3 h-3" />
+                  <span>Standard</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQueryMode('eda')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                    queryMode === 'eda'
+                      ? 'bg-indigo-500/20 text-indigo-300 shadow-sm border border-indigo-500/30'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <TrendingUp className="w-3 h-3" />
+                  <span>EDA & Predict</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQueryMode('agent')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                    queryMode === 'agent'
+                      ? 'bg-cyan-500/20 text-cyan-300 shadow-sm border border-cyan-500/30'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI Agent</span>
+                </button>
+              </div>
+
             </div>
             <form onSubmit={handleQuerySubmit} className="space-y-4">
               <div className="relative">
@@ -565,7 +717,7 @@ export default function WorkspaceQueryPage() {
                   type="text"
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder={agentMode ? "e.g. why did electronics revenue drop in March?" : "e.g. show me top 10 users by created date"}
+                  placeholder={queryMode === 'agent' ? "e.g. why did electronics revenue drop in March?" : (queryMode === 'eda' ? "e.g. show me a 3-month moving average of new users" : "e.g. show me top 10 users by created date")}
                   className="w-full glass-input rounded-xl pl-4 pr-12 py-3.5 text-sm text-slate-200 focus:outline-none placeholder-slate-600"
                   disabled={executing}
                   required
@@ -586,7 +738,7 @@ export default function WorkspaceQueryPage() {
           </div>
 
           {/* Agent Mode Logs */}
-          {agentMode && (agentSteps.length > 0 || executing || agentAnswer) && (
+          {queryMode === 'agent' && (agentSteps.length > 0 || executing || agentAnswer) && (
             <AgentSteps steps={agentSteps} finalAnswer={agentAnswer} executing={executing} />
           )}
 
@@ -615,27 +767,43 @@ export default function WorkspaceQueryPage() {
           )}
 
           {/* AI query plan streaming logs */}
-          {!agentMode && queryPlan && <QueryPlanSteps plan={queryPlan} activeStage={activeStage} />}
+          {queryMode !== 'agent' && queryPlan && <QueryPlanSteps plan={queryPlan} activeStage={activeStage} />}
 
           {/* SQL Monaco code viewer panel */}
-          {!agentMode && generatedSql && <SQLViewer sql={generatedSql} explanation={explanation} />}
+          {queryMode !== 'agent' && generatedSql && <SQLViewer sql={generatedSql} explanation={explanation} />}
 
           {/* Dynamic Recharts recommendations panel */}
-          {!agentMode && chartType && chartType !== 'table' && rows.length > 0 && (
+          {queryMode === 'eda' && chartType && chartType !== 'table' && rows.length > 0 && (
             <ChartRenderer chartType={chartType} fields={fields} rows={rows} />
           )}
 
           {/* Query result data grid */}
-          {!agentMode && (fields.length > 0 || rows.length > 0) && (
-            <ResultTable
-              fields={fields}
-              rows={rows}
-              truncated={truncated}
-            />
+          {queryMode !== 'agent' && (fields.length > 0 || rows.length > 0) && (
+            <div className="space-y-3">
+              {queryId && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setShowSaveDashboardModal(true);
+                      fetchDashboardsForModal();
+                    }}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-indigo-400 text-xs font-bold transition-all"
+                  >
+                    <Layout className="w-3.5 h-3.5" />
+                    <span>Save to Dashboard</span>
+                  </button>
+                </div>
+              )}
+              <ResultTable
+                fields={fields}
+                rows={rows}
+                truncated={truncated}
+              />
+            </div>
           )}
 
           {/* RLHF Feedbacks panel */}
-          {!agentMode && queryId && activeStage === 'completed' && (
+          {queryMode !== 'agent' && queryId && activeStage === 'completed' && (
             <FeedbackCard workspaceId={workspaceId} queryId={queryId} />
           )}
         </div>
@@ -761,6 +929,98 @@ export default function WorkspaceQueryPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 5. Save to Dashboard Modal */}
+      {showSaveDashboardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-md p-6 rounded-3xl glow-indigo border-slate-800 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Layout className="w-4 h-4 text-cyan-400 mr-2" />
+                Save Result to Dashboard
+              </h3>
+              <button
+                onClick={() => setShowSaveDashboardModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {saveDashboardError && (
+                <div className="p-3 text-[10px] rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400">
+                  {saveDashboardError}
+                </div>
+              )}
+
+              {saveDashboardSuccess && (
+                <div className="p-3 text-[10px] rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400">
+                  {saveDashboardSuccess}
+                </div>
+              )}
+
+              {loadingDashboards ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                </div>
+              ) : dashboardsList.length === 0 ? (
+                <div className="text-xs text-slate-500 italic py-2 text-center">
+                  No dashboards found. Create one below!
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Select Dashboard
+                  </label>
+                  <select
+                    value={selectedDashboardId}
+                    onChange={(e) => {
+                      setSelectedDashboardId(e.target.value);
+                      setNewDashboardName(''); // Clear new name if selecting existing
+                    }}
+                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                  >
+                    {dashboardsList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="border-t border-slate-900 my-4 pt-4">
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Or Create a New Dashboard Grid
+                </label>
+                <input
+                  type="text"
+                  placeholder="New dashboard name..."
+                  value={newDashboardName}
+                  onChange={(e) => {
+                    setNewDashboardName(e.target.value);
+                    setSelectedDashboardId(''); // Deselect existing if creating new
+                  }}
+                  className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={savingToDashboard || (!selectedDashboardId && !newDashboardName.trim())}
+                onClick={handleSaveToDashboard}
+                className="w-full flex items-center justify-center space-x-1.5 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 hover:from-cyan-300 hover:to-indigo-400 text-slate-950 text-xs font-bold transition-all disabled:opacity-40"
+              >
+                {savingToDashboard ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                ) : (
+                  <span>Add Widget to Grid</span>
+                )}
+              </button>
             </div>
           </div>
         </div>

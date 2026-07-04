@@ -37,7 +37,7 @@ export default function ChartRenderer({ chartType, fields, rows }: ChartRenderer
   if (!chartType || chartType === 'table' || rows.length === 0) return null;
 
   const xAxisKey = fields[0];
-  const yAxisKey = fields[1] || fields[0];
+  const yAxisKeys = fields.slice(1);
 
   // Clean data: convert numeric fields in string format to real numbers for charts
   const chartData = rows.map((row) => {
@@ -111,17 +111,15 @@ export default function ChartRenderer({ chartType, fields, rows }: ChartRenderer
                   color: '#f8fafc',
                 }}
               />
-              <Bar
-                dataKey={yAxisKey}
-                fill="url(#barGradient)"
-                radius={[4, 4, 0, 0]}
-              />
-              <defs>
-                <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#06b6d4" />
-                  <stop offset="100%" stopColor="#6366f1" />
-                </linearGradient>
-              </defs>
+              <Legend />
+              {yAxisKeys.map((key, idx) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  fill={COLORS[idx % COLORS.length]}
+                  radius={[4, 4, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -167,14 +165,18 @@ export default function ChartRenderer({ chartType, fields, rows }: ChartRenderer
                   color: '#f8fafc',
                 }}
               />
-              <Line
-                type="monotone"
-                dataKey={yAxisKey}
-                stroke="#06b6d4"
-                strokeWidth={3}
-                dot={{ r: 4, stroke: '#0f172a', strokeWidth: 2, fill: '#06b6d4' }}
-                activeDot={{ r: 6 }}
-              />
+              <Legend />
+              {yAxisKeys.map((key, idx) => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={COLORS[idx % COLORS.length]}
+                  strokeWidth={3}
+                  dot={{ r: 4, stroke: '#0f172a', strokeWidth: 2, fill: COLORS[idx % COLORS.length] }}
+                  activeDot={{ r: 6 }}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -202,7 +204,7 @@ export default function ChartRenderer({ chartType, fields, rows }: ChartRenderer
                 innerRadius={60}
                 outerRadius={90}
                 paddingAngle={4}
-                dataKey={yAxisKey}
+                dataKey={yAxisKeys[0]}
                 nameKey={xAxisKey}
                 label={({ name, percent }) => `${name} (${typeof percent === 'number' ? (percent * 100).toFixed(0) : '0'}%)`}
               >
