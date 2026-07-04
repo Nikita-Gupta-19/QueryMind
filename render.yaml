@@ -14,9 +14,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: querymind-db
-          property: connectionString
+        sync: false
+        placeholder: "Paste your Neon database connection string here (postgresql://...)"
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -62,9 +61,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: querymind-db
-          property: connectionString
+        fromService:
+          type: web
+          name: querymind-api
+          envVarKey: DATABASE_URL
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -85,8 +85,3 @@ services:
     name: querymind-redis
     plan: free
     ipAllowList: []
-
-databases:
-  - name: querymind-db
-    plan: free
-    postgresMajorVersion: 16
