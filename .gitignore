@@ -40,3 +40,7 @@ Thumbs.db
 # Docker volumes / data directories
 postgres_data/
 redis_data/
+
+# Revision handbooks
+interview_handbook.md
+
