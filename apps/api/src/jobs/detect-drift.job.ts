@@ -5,6 +5,8 @@ import { getRedisConnection } from '../lib/redis';
 import { decrypt } from '../modules/connections/crypto.utils';
 import { introspectDatabase, computeSchemaFingerprint, TableSchema } from '../modules/schema/introspector';
 import { enqueueEmbedSchemaJob } from './embed-schema.job';
+import { publishSocketEvent } from '../lib/pubsub';
+
 
 // ─── Queue Definition ─────────────────────────────────────────────────────────
 
@@ -207,15 +209,12 @@ export function startDetectDriftWorker(): Worker {
         },
       });
 
-      // 6. Notify active workspace users via Socket.IO
-      const io = (global as any).expressAppIo || reqGetIoPlaceholder();
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('schema:drift', {
-          connectionId,
-          connectionName: conn.name,
-          diff,
-        });
-      }
+      // 6. Notify active workspace users via Socket.IO Redis bridge
+      await publishSocketEvent(`workspace:${workspaceId}`, 'schema:drift', {
+        connectionId,
+        connectionName: conn.name,
+        diff,
+      });
 
       return {
         driftDetected: true,
@@ -231,12 +230,3 @@ export function startDetectDriftWorker(): Worker {
   return worker;
 }
 
-// Global Express IO getter workaround
-function reqGetIoPlaceholder() {
-  try {
-    const { app } = require('../app');
-    return app?.get('io');
-  } catch {
-    return null;
-  }
-}
