@@ -4,19 +4,10 @@ import { WorkspaceRole, QueryStatus } from '@prisma/client';
 import prisma from '../../config/db';
 import { authenticateJWT } from '../../middleware/auth.middleware';
 import { requireWorkspaceRole } from '../workspace/workspace.controller';
-import { decrypt } from '../connections/crypto.utils';
-import { decryptString } from '../../lib/encryption';
-import { retrieveRelevantSchema, buildSchemaContext } from './rag';
-import { generateSQL, generateEdaSQL, generateQueryPlan } from './generator';
-import { validateSQL } from './validator';
-import { executeQuery } from './executor';
-import { cacheGet, cacheSet } from '../../lib/redis';
-import { resolveGlossaryTerms, buildGlossaryContext } from './glossary-resolver';
-import { queriesExecutedCounter, cacheHitsCounter, queryExecutionDuration } from '../../lib/metrics';
+import { cacheGet } from '../../lib/redis';
+import { queriesExecutedCounter, cacheHitsCounter } from '../../lib/metrics';
 
 const router = Router({ mergeParams: true });
-
-const CACHE_TTL_SECONDS = 300; // 5 minutes
 
 // ─── Helper: build cache key ──────────────────────────────────────────────────
 
@@ -77,8 +68,7 @@ router.post(
     if (!connection) {
       return res.status(404).json({ error: 'Database connection not found in this workspace.' });
     }
-    
-    const customGeminiKey = connection.workspace.encryptedGeminiKey ? decryptString(connection.workspace.encryptedGeminiKey) : undefined;
+
 
     // ── Create a RUNNING query history entry early (for real-time tracking) ──
     const queryRecord = await prisma.queryHistory.create({
@@ -126,246 +116,23 @@ router.post(
         });
       }
 
-      // ── Step 2: RAG — retrieve relevant schema via cosine similarity ────────
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:progress', {
-          queryId,
-          stage: 'schema_retrieval',
-          message: 'Searching relevant tables...',
-        });
-      }
-
-      let relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5, customGeminiKey);
-      let syncError: string | null = null;
-
-      if (relevantTables.length === 0) {
-        try {
-          if (io) {
-            io.to(`workspace:${workspaceId}`).emit('query:progress', {
-              queryId,
-              stage: 'schema_sync',
-              message: 'Database schema not synced. Syncing schema dynamically now (can take a minute)...',
-            });
-          }
-          const { syncSchemaInProcess } = await import('../schema/sync-schema.utils');
-          await syncSchemaInProcess(connectionId);
-          relevantTables = await retrieveRelevantSchema(trimmedQuestion, connectionId, 5, customGeminiKey);
-        } catch (syncErr: any) {
-          console.error('[QueryController] Dynamic inline schema sync failed:', syncErr);
-          syncError = syncErr.message || String(syncErr);
-        }
-      }
-
-      if (relevantTables.length === 0) {
-        await prisma.queryHistory.update({
-          where: { id: queryId },
-          data: { status: QueryStatus.FAILED },
-        });
-        return res.status(422).json({
-          error: syncError 
-            ? `Failed to sync database schema: ${syncError}`
-            : 'No schema embeddings found for this connection. Please trigger schema sync first.',
-          hint: 'Ensure your database is online, reachable, and has available connection slots.',
-        });
-      }
-
-      const schemaContext = buildSchemaContext(relevantTables);
-
-      // ── Step 2.5: Resolve business glossary terms ──────────────────────────
-      const glossaryTerms = await resolveGlossaryTerms(trimmedQuestion, workspaceId, 3, 0.5, customGeminiKey);
-      const glossaryContext = buildGlossaryContext(glossaryTerms);
-
-      // ── Step 3: Generate query plan (streamed via Socket.IO) ───────────────
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:progress', {
-          queryId,
-          stage: 'planning',
-          message: 'Generating query plan...',
-        });
-      }
-
-      const queryPlan = await generateQueryPlan(trimmedQuestion, schemaContext, customGeminiKey);
-
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:plan', {
-          queryId,
-          plan: queryPlan,
-        });
-      }
-
-      // ── Step 4: Generate SQL with Gemini 2.0 Flash ─────────────────────────
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:progress', {
-          queryId,
-          stage: 'sql_generation',
-          message: 'Generating SQL...',
-        });
-      }
-
+      // ── Step 2: Enqueue query execution job in background ──────────────────
       const isEda = req.path.endsWith('/eda');
-      const generateFn = isEda ? generateEdaSQL : generateSQL;
-      const { sql: rawSQL, explanation, confidence } = await generateFn(
-        trimmedQuestion,
-        schemaContext,
-        connection.dbType as 'POSTGRES' | 'MYSQL',
-        glossaryContext,
-        customGeminiKey
-      );
-
-      // ── Step 5: 4-layer SQL safety validation ──────────────────────────────
-      const validation = validateSQL(rawSQL, { isEda });
-
-      if (!validation.valid) {
-        // Log rejection to audit_logs
-        await prisma.auditLog.create({
-          data: {
-            workspaceId,
-            userId,
-            action: 'SQL_REJECTED',
-            resourceType: 'QUERY',
-            resourceId: queryId,
-            metadata: {
-              question: trimmedQuestion,
-              generatedSql: rawSQL,
-              rejectionReason: validation.rejectionReason,
-              rejectionLayer: validation.rejectionLayer,
-            },
-          },
-        });
-
-        await prisma.queryHistory.update({
-          where: { id: queryId },
-          data: {
-            generatedSql: rawSQL,
-            status: QueryStatus.FAILED,
-          },
-        });
-
-        return res.status(422).json({
-          queryId,
-          error: 'Generated SQL failed safety validation.',
-          rejectionReason: validation.rejectionReason,
-          rejectionLayer: validation.rejectionLayer,
-          generatedSql: rawSQL,
-        });
-      }
-
-      const safeSQL = validation.sql;
-
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:sql_ready', {
-          queryId,
-          sql: safeSQL,
-          explanation,
-          confidence,
-          modifications: validation.modifications,
-        });
-      }
-
-      // ── Step 6: Execute query ───────────────────────────────────────────────
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:progress', {
-          queryId,
-          stage: 'executing',
-          message: 'Executing query...',
-        });
-      }
-
-      const connectionString = decrypt(connection.encryptedConnString);
-      const queryResult = await executeQuery(connectionString, connection.dbType, safeSQL);
-
-      // Record metrics
-      queriesExecutedCounter.inc({ status: 'success' });
-      queryExecutionDuration.observe(queryResult.executionMs / 1000);
-
-      // ── Step 7: Determine chart type from result shape ─────────────────────
-      const chartType = detectChartType(queryResult.fields, queryResult.rows);
-
-      // ── Step 8: Persist to query_history ───────────────────────────────────
-      const resultPreview = {
-        rows: queryResult.rows.slice(0, 50), // Store only first 50 rows as preview
-        fields: queryResult.fields,
-        rowCount: queryResult.rowCount,
-        truncated: queryResult.truncated,
-      };
-
-      await prisma.queryHistory.update({
-        where: { id: queryId },
-        data: {
-          generatedSql: safeSQL,
-          resultPreview: resultPreview as any,
-          chartType,
-          executionMs: queryResult.executionMs,
-          status: QueryStatus.SUCCESS,
-        },
+      const { enqueueQueryExecutionJob } = await import('../../jobs/query-execution.job');
+      await enqueueQueryExecutionJob({
+        queryId,
+        workspaceId,
+        connectionId,
+        question: trimmedQuestion,
+        isEda,
+        userId,
       });
 
-      // Audit log
-      await prisma.auditLog.create({
-        data: {
-          workspaceId,
-          userId,
-          action: 'QUERY_EXECUTED',
-          resourceType: 'QUERY',
-          resourceId: queryId,
-          metadata: {
-            question: trimmedQuestion,
-            executionMs: queryResult.executionMs,
-            rowCount: queryResult.rowCount,
-            connectionId,
-          },
-        },
-      });
-
-      // ── Step 9: Cache result ────────────────────────────────────────────────
-      const cachePayload = {
-        sql: safeSQL,
-        explanation,
-        confidence,
-        queryPlan,
-        result: resultPreview,
-        chartType,
-        modifications: validation.modifications,
-      };
-      await cacheSet(cacheKey, JSON.stringify(cachePayload), CACHE_TTL_SECONDS);
-
-      // ── Emit completion event ───────────────────────────────────────────────
-      if (io) {
-        io.to(`workspace:${workspaceId}`).emit('query:completed', {
-          queryId,
-          executionMs: queryResult.executionMs,
-          rowCount: queryResult.rowCount,
-          chartType,
-        });
-      }
-
-      // ── Return response ─────────────────────────────────────────────────────
       return res.json({
         queryId,
         question: trimmedQuestion,
-        cached: false,
-        queryPlan,
-        sql: safeSQL,
-        explanation,
-        confidence,
-        modifications: validation.modifications,
-        result: {
-          rows: queryResult.rows,
-          fields: queryResult.fields,
-          rowCount: queryResult.rowCount,
-          executionMs: queryResult.executionMs,
-          truncated: queryResult.truncated,
-        },
-        chartType,
-        relevantTables: relevantTables.map((t) => ({
-          tableName: t.tableName,
-          similarity: Math.round(t.similarity * 100) / 100,
-        })),
-        resolvedGlossary: glossaryTerms.map((g) => ({
-          businessTerm: g.businessTerm,
-          schemaTerm: g.schemaTerm,
-          similarity: Math.round(g.similarity * 100) / 100,
-        })),
+        status: 'QUEUED',
+        message: 'Query queued for background execution.',
       });
     } catch (err: any) {
       queriesExecutedCounter.inc({ status: 'failed' });
@@ -458,49 +225,5 @@ router.post(
     }
   }
 );
-
-// ─── Chart Type Detector ──────────────────────────────────────────────────────
-
-/**
- * Determine appropriate chart type from query result shape.
- *
- * Logic:
- * - 1 row × 1 col  → "kpi"   (big number card)
- * - 1 col, many    → "bar"
- * - 2 cols (str+num) → "bar" or "pie" (≤10 rows → pie, >10 → bar)
- * - 2 cols (date+num) → "line"
- * - 3+ cols         → "table"
- */
-function detectChartType(fields: string[], rows: Record<string, unknown>[]): string {
-  if (rows.length === 0) return 'table';
-  if (rows.length === 1 && fields.length === 1) return 'kpi';
-  if (fields.length === 1) return 'bar';
-
-  if (fields.length >= 2) {
-    const firstVal = rows[0][fields[0]];
-    const secondVal = rows[0][fields[1]];
-
-    // Check if second column is numeric
-    const secondIsNumeric = typeof secondVal === 'number' ||
-      (typeof secondVal === 'string' && !isNaN(Number(secondVal)));
-
-    if (secondIsNumeric) {
-      // Check if first column looks like a date
-      const firstStr = String(firstVal);
-      const looksLikeDate = /^\d{4}[-/]/.test(firstStr) ||
-        /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(firstStr);
-
-      if (looksLikeDate) return 'line';
-
-      // If we have 3+ columns, default to line chart to show multiple series (or bar chart if short).
-      if (fields.length > 2) return rows.length <= 10 ? 'bar' : 'line';
-
-      // Pie for small categorical data, bar for larger
-      return rows.length <= 10 ? 'pie' : 'bar';
-    }
-  }
-
-  return 'table';
-}
 
 export default router;

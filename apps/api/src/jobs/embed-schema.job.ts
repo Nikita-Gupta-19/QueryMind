@@ -39,13 +39,17 @@ export async function enqueueEmbedSchemaJob(data: EmbedSchemaJobData): Promise<v
  * HNSW is significantly faster than IVFFlat for approximate nearest neighbor search.
  */
 async function ensureHNSWIndex(): Promise<void> {
-  // Use raw SQL since Prisma doesn't manage vector indexes
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS schema_embeddings_embedding_hnsw_idx
-    ON "schema_embeddings"
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64)
-  `);
+  try {
+    // Use raw SQL since Prisma doesn't manage vector indexes
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS schema_embeddings_embedding_hnsw_idx
+      ON "schema_embeddings"
+      USING hnsw (embedding vector_cosine_ops)
+      WITH (m = 16, ef_construction = 64)
+    `);
+  } catch (err: any) {
+    console.warn('[EmbedSchema] HNSW Index creation failed (can happen if dimensions > 2000). Skipping index creation.', err.message || err);
+  }
 }
 
 // ─── Worker ───────────────────────────────────────────────────────────────────

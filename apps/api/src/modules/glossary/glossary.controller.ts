@@ -70,7 +70,7 @@ router.post(
         await prisma.$executeRawUnsafe(
           `UPDATE "GlossaryTerm"
            SET "schemaTerm" = $1, description = $2, embedding = $3::vector
-           WHERE id = $4 AND "workspaceId" = $5`,
+           WHERE id = $4::uuid AND "workspaceId" = $5::uuid`,
           schemaTerm.trim(),
           description || null,
           embeddingStr,
@@ -101,7 +101,7 @@ router.post(
         const termId = crypto.randomUUID();
         await prisma.$executeRawUnsafe(
           `INSERT INTO "GlossaryTerm" (id, "workspaceId", "businessTerm", "schemaTerm", description, embedding, "createdAt")
-           VALUES ($1, $2, $3, $4, $5, $6::vector, NOW())`,
+           VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::vector, NOW())`,
           termId,
           workspaceId,
           businessTerm.trim(),

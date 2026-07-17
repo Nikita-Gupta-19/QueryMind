@@ -17,6 +17,7 @@ import glossaryRouter from './modules/glossary/glossary.controller';
 import dashboardRouter from './modules/dashboard/dashboard.controller';
 import agentRouter from './modules/agent/agent.controller';
 import { prometheusRegistry } from './lib/metrics';
+import { initSocketBridge } from './lib/pubsub';
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +75,9 @@ io.on('connection', (socket) => {
 
 // Attach io instance to express app to make it accessible in routes/controllers
 app.set('io', io);
+
+// Initialize Redis Pub/Sub socket bridge
+initSocketBridge(io);
 
 // Request logger middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {

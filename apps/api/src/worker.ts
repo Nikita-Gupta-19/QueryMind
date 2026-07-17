@@ -4,6 +4,7 @@ dotenv.config();
 
 import { startEmbedSchemaWorker } from './jobs/embed-schema.job';
 import { startDetectDriftWorker, scheduleDailyDriftChecks } from './jobs/detect-drift.job';
+import { startQueryExecutionWorker } from './jobs/query-execution.job';
 
 console.log('[Worker] Starting QueryMind background worker process...');
 
@@ -13,6 +14,9 @@ console.log('[Worker] BullMQ embed-schema worker initialized');
 
 const detectDriftWorker = startDetectDriftWorker();
 console.log('[Worker] BullMQ detect-drift worker initialized');
+
+const queryExecutionWorker = startQueryExecutionWorker();
+console.log('[Worker] BullMQ query-execution worker initialized');
 
 // Schedule recurring drift checks
 scheduleDailyDriftChecks()
@@ -29,7 +33,8 @@ const gracefulShutdown = async (signal: string) => {
   
   await Promise.all([
     embedSchemaWorker.close(),
-    detectDriftWorker.close()
+    detectDriftWorker.close(),
+    queryExecutionWorker.close()
   ]);
   
   console.log('[Worker] Workers closed. Exiting process.');

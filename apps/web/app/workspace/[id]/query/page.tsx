@@ -365,10 +365,21 @@ export default function WorkspaceQueryPage() {
       setConfidence(data.confidence);
     });
 
-    socket.on('query:completed', (data: { chartType: string }) => {
+    socket.on('query:completed', (data: { 
+      chartType: string;
+      result: {
+        rows: any[];
+        fields: string[];
+        truncated: boolean;
+      }
+    }) => {
       setActiveStage('completed');
       setStageMessage('Query completed successfully.');
       setChartType(data.chartType);
+      setFields(data.result?.fields || []);
+      setRows(data.result?.rows || []);
+      setTruncated(data.result?.truncated || false);
+      setExecuting(false);
       
       // Refresh History List
       fetch(`${API_URL}/api/workspaces/${workspaceId}/query/history?limit=10`, {
@@ -379,9 +390,13 @@ export default function WorkspaceQueryPage() {
         .catch(console.error);
     });
 
-    socket.on('query:failed', (data: { error: string }) => {
+    socket.on('query:failed', (data: { error: string; rejectionReason?: string }) => {
       setActiveStage('failed');
-      setStageMessage(`Execution failed: ${data.error}`);
+      let errMsg = `Execution failed: ${data.error}`;
+      if (data.rejectionReason) errMsg += `\nReason: ${data.rejectionReason}`;
+      setStageMessage(errMsg);
+      setQueryError(errMsg);
+      setExecuting(false);
     });
 
     // Agent Loop Listeners
@@ -463,23 +478,31 @@ export default function WorkspaceQueryPage() {
         let errMsg = data.error || 'Failed to execute query.';
         if (data.rejectionReason) errMsg += `\nReason: ${data.rejectionReason}`;
         setQueryError(errMsg);
+        setExecuting(false);
       } else {
         if (queryMode === 'agent') {
           setAgentAnswer(data.answer || '');
+          setExecuting(false);
         } else {
-          // Load data returned synchronously for regular queries
-          setFields(data.result?.fields || []);
-          setRows(data.result?.rows || []);
-          setTruncated(data.result?.truncated || false);
-          setChartType(data.chartType || 'table');
-          setQueryPlan(data.queryPlan || '');
-          setGeneratedSql(data.sql || '');
-          setExplanation(data.explanation || '');
+          // If query was cached, it returns results synchronously
+          if (data.cached) {
+            setFields(data.result?.fields || []);
+            setRows(data.result?.rows || []);
+            setTruncated(data.result?.truncated || false);
+            setChartType(data.chartType || 'table');
+            setQueryPlan(data.queryPlan || '');
+            setGeneratedSql(data.sql || '');
+            setExplanation(data.explanation || '');
+            setExecuting(false);
+          } else {
+            // It was queued, so we let the socket listeners handle completion/failure.
+            // We save the queryId just in case.
+            setQueryId(data.queryId);
+          }
         }
       }
     } catch (err) {
       setQueryError('API Connection failed. Ensure the server is running.');
-    } finally {
       setExecuting(false);
     }
   };

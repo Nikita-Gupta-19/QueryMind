@@ -151,9 +151,10 @@ export default function WorkspaceSettingsPage() {
     setSuccessMsg(null);
 
     try {
-      const payload: any = {};
-      if (geminiKeyInput.trim()) payload.geminiApiKey = geminiKeyInput.trim();
-      if (openAiKeyInput.trim()) payload.openAiApiKey = openAiKeyInput.trim();
+      const payload: any = {
+        geminiApiKey: geminiKeyInput.trim() || null,
+        openAiApiKey: openAiKeyInput.trim() || null,
+      };
 
       const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/keys`, {
         method: 'PUT',

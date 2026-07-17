@@ -5,12 +5,16 @@ import { introspectDatabase, computeSchemaFingerprint, TableSchema } from './int
 import { generateEmbeddingsBatch } from '../../lib/embeddings';
 
 async function ensureHNSWIndex(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS schema_embeddings_embedding_hnsw_idx
-    ON "schema_embeddings"
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64)
-  `);
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS schema_embeddings_embedding_hnsw_idx
+      ON "schema_embeddings"
+      USING hnsw (embedding vector_cosine_ops)
+      WITH (m = 16, ef_construction = 64)
+    `);
+  } catch (err: any) {
+    console.warn('[SyncSchemaUtils] HNSW Index creation failed (can happen if dimensions > 2000). Skipping index creation.', err.message || err);
+  }
 }
 
 export async function syncSchemaInProcess(connectionId: string): Promise<void> {
